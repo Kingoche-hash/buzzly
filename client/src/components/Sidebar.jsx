@@ -16,6 +16,7 @@ import NewChatDialog from './NewChatDialog';
 import ProfileDialog from './ProfileDialog';
 import SearchPanel from './SearchPanel';
 import { ConversationListSkeleton } from './Skeleton';
+import StoriesRow from './StoriesRow';
 
 const tabClass = (selected) =>
   `flex-1 py-2 text-sm font-medium ${
@@ -140,6 +141,8 @@ export default function Sidebar({
         />
       ) : (
         <>
+          <StoriesRow />
+
           <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2">
             <FilterMenu value={filter} onChange={setFilter} counts={counts} />
             <button

@@ -5,10 +5,15 @@ import { env } from './config/env.js';
 import { connectDB } from './config/db.js';
 import { connectRedis, redis } from './config/redis.js';
 import { resetPresence } from './services/presence.service.js';
+import { cleanupExpiredStories } from './services/story.service.js';
 import { initSocket } from './socket/index.js';
 
 const server = http.createServer(app);
 const io = initSocket(server);
+
+const runStoryCleanup = () => {
+  cleanupExpiredStories().catch((error) => console.error('Story cleanup error:', error.message));
+};
 
 const start = async () => {
   try {
@@ -18,6 +23,10 @@ const start = async () => {
 
     server.listen(env.port, () => {
       console.log(`Server running on port ${env.port} (${env.nodeEnv})`);
+
+      // Remove expired stories now, and then every hour.
+      runStoryCleanup();
+      setInterval(runStoryCleanup, 60 * 60 * 1000);
     });
   } catch (error) {
     console.error('Failed to start server:', error.message);

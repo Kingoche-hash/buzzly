@@ -12,6 +12,16 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+/* The bar at the top of a story that fills up while the story plays. */
+@keyframes story-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
 /* People who asked their computer to reduce motion get no pulsing. */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse {
