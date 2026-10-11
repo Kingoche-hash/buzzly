@@ -1,4 +1,5 @@
 import api from './api';
+import { setToken } from './tokenStorage';
 
 export const updateProfileRequest = async (patch) => {
   const res = await api.patch('/profile', patch);
@@ -19,7 +20,10 @@ export const removeAvatarRequest = async () => {
 };
 
 export const changePasswordRequest = async ({ currentPassword, newPassword }) => {
-  await api.post('/profile/password', { currentPassword, newPassword });
+  const res = await api.post('/profile/password', { currentPassword, newPassword });
+
+  // The old wristband stopped working with the old password. Keep the fresh one.
+  if (res.data.token) setToken(res.data.token);
 };
 
 export const deleteAccountRequest = async (password) => {

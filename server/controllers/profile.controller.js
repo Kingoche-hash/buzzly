@@ -4,12 +4,13 @@ import {
   removeAvatar,
   setAvatar,
   updateProfile,
-} from '../services/profile.Service.js';
+} from '../services/profile.service.js';
 import { getPrivacy, pickPrivacy, setPrivacy } from '../services/privacyCache.js';
 import { userRoom } from '../socket/emitters.js';
 import { getIO } from '../socket/io.js';
 import { broadcastProfileUpdate, broadcastVisibilityChange } from '../socket/presence.js';
 import { AppError } from '../utils/AppError.js';
+import { signToken } from '../utils/token.js';
 
 export const updateMyProfile = async (req, res) => {
   const wasVisible = getPrivacy(req.user._id).showPresence;
@@ -48,7 +49,14 @@ export const removeMyAvatar = async (req, res) => {
 
 export const changeMyPassword = async (req, res) => {
   await changePassword(req.user._id, req.body);
-  res.status(200).json({ message: 'Password changed' });
+
+  // Every older wristband is now cancelled. This device gets a fresh one and stays signed in.
+  const token = signToken(req.user._id.toString());
+
+  // Hang up the live connections, which still hold the old wristband. This device reconnects by itself.
+  getIO()?.in(userRoom(req.user._id.toString())).disconnectSockets(true);
+
+  res.status(200).json({ message: 'Password changed', token });
 };
 
 export const deleteMyAccount = async (req, res) => {

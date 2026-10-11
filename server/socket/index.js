@@ -9,7 +9,7 @@ import { conversationRoom, userRoom } from './emitters.js';
 
 export const initSocket = (httpServer) => {
   const io = new Server(httpServer, {
-    cors: { origin: env.clientUrl, credentials: true },
+    cors: { origin: env.clientUrls, credentials: true },
     maxHttpBufferSize: 1e5,
   });
 

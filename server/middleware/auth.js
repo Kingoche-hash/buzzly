@@ -19,6 +19,11 @@ export const protect = async (req, res, next) => {
     throw new AppError('User no longer exists', 401);
   }
 
+  // A password change cancels every wristband handed out before it.
+  if (user.passwordChangedAt && Math.floor(user.passwordChangedAt.getTime() / 1000) > payload.iat) {
+    throw new AppError('Your session has expired. Please log in again.', 401);
+  }
+
   req.user = user;
   next();
 };

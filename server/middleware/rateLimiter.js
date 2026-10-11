@@ -1,9 +1,20 @@
 import rateLimit from 'express-rate-limit';
 import { env } from '../config/env.js';
 
+const production = env.nodeEnv === 'production';
+
+// A ceiling for the whole API, per visitor address.
+export const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: production ? 600 : 5000,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please slow down' },
+});
+
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: env.nodeEnv === 'production' ? 20 : 100,
+  limit: production ? 20 : 100,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { message: 'Too many attempts, please try again later' },
@@ -11,8 +22,16 @@ export const authLimiter = rateLimit({
 
 export const uploadLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  limit: env.nodeEnv === 'production' ? 30 : 200,
+  limit: production ? 30 : 200,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { message: 'Too many uploads, please try again later' },
+});
+
+export const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: production ? 60 : 300,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'Too many searches, please slow down' },
 });

@@ -22,12 +22,24 @@ if (process.env.JWT_SECRET.length < 32) {
   process.exit(1);
 }
 
+// "https://a.com, https://b.com" becomes ['https://a.com', 'https://b.com'].
+const parseList = (value) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const clientUrls = parseList(process.env.CLIENT_URL || 'http://localhost:5173');
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT) || 5001,
   mongoUri: process.env.MONGODB_URI,
   redisUrl: process.env.REDIS_URL,
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  clientUrl: clientUrls[0],
+  clientUrls,
+  // How many hosting proxies sit in front of the server (0 on your computer, 1 on most hosts).
+  trustProxy: Number(process.env.TRUST_PROXY) || 0,
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   cloudinary: {

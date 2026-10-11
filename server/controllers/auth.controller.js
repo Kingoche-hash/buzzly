@@ -6,7 +6,7 @@ export const register = async (req, res) => {
 };
 
 export const login = async (req, res) => {
-  const { user, token } = await loginUser(req.body);
+  const { user, token } = await loginUser(req.body, req.ip);
   res.status(200).json({ user, token });
 };
 

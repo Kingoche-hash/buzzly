@@ -15,11 +15,16 @@ export const authenticateSocket = async (socket, next) => {
 
     const payload = verifyToken(token);
     const user = await User.findById(payload.sub).select(
-      'username displayName avatar privacy deletedAt'
+      'username displayName avatar privacy deletedAt passwordChangedAt'
     );
 
     if (!user || user.deletedAt) {
       return next(new Error('Not authenticated'));
+    }
+
+    // A wristband handed out before the last password change no longer works.
+    if (user.passwordChangedAt && Math.floor(user.passwordChangedAt.getTime() / 1000) > payload.iat) {
+      return next(new Error('Invalid or expired token'));
     }
 
     const conversations = await Conversation.find({ members: user._id }).select('_id').lean();

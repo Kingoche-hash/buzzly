@@ -9,15 +9,24 @@ import profileRoutes from './routes/profile.routes.js';
 import conversationRoutes from './routes/conversation.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import storyRoutes from './routes/story.routes.js';
+import { apiLimiter } from './middleware/rateLimiter.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
 
+// Behind a hosting company's proxy, the real visitor address is in a header.
+app.set('trust proxy', env.trustProxy);
+app.disable('x-powered-by');
+
 app.use(helmet());
-app.use(cors({ origin: env.clientUrl, credentials: true }));
+app.use(cors({ origin: env.clientUrls, credentials: true }));
 app.use(express.json({ limit: '10kb' }));
 
+// The health check stays outside the limiter, so monitoring never gets blocked.
 app.use('/api/health', healthRoutes);
+
+app.use('/api', apiLimiter);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/profile', profileRoutes);

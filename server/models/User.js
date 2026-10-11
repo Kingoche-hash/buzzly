@@ -24,6 +24,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       select: false,
     },
+    passwordChangedAt: { type: Date, default: null },
     avatar: { type: String, default: '' },
     avatarPublicId: { type: String, default: '', select: false },
     bio: { type: String, trim: true, maxlength: 160, default: '' },
@@ -42,7 +43,11 @@ const userSchema = new mongoose.Schema(
 
 userSchema.pre('save', async function () {
   if (!this.isModified('password')) return;
+
   this.password = await bcrypt.hash(this.password, 12);
+
+  // A new password signs out every session that started before it.
+  if (!this.isNew) this.passwordChangedAt = new Date();
 });
 
 userSchema.methods.comparePassword = function (candidate) {

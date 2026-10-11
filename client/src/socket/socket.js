@@ -1,6 +1,8 @@
 import { io } from 'socket.io-client';
+import { getToken } from '../services/tokenStorage';
 
-export const createSocket = (token) =>
+// `auth` is a function, so every reconnect uses the newest token.
+export const createSocket = () =>
   io(import.meta.env.VITE_SOCKET_URL, {
-    auth: { token },
+    auth: (callback) => callback({ token: getToken() }),
   });
