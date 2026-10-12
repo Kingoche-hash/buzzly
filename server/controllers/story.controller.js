@@ -6,7 +6,8 @@ import {
   markViewed,
   toStoryDto,
 } from '../services/story.service.js';
-import { userRoom } from '../socket/emitters.js';
+import { replyToStory } from '../services/storyReply.service.js';
+import { announceConversation, broadcastMessage, userRoom } from '../socket/emitters.js';
 import { emitToContacts } from '../socket/contacts.js';
 import { getIO } from '../socket/io.js';
 import { AppError } from '../utils/AppError.js';
@@ -55,4 +56,19 @@ export const deleteMyStory = async (req, res) => {
   await emitToContacts(req.user._id, 'stories_changed', { userId: req.user._id.toString() });
 
   res.status(200).json({ message: 'Story deleted' });
+};
+
+// A reply to someone's story arrives in your chat with them as a normal message.
+export const replyToStoryHandler = async (req, res) => {
+  const { conversation, created, message } = await replyToStory({
+    userId: req.user._id,
+    storyId: req.params.storyId,
+    content: req.body.content,
+  });
+
+  // A brand-new chat is announced first, so both people's windows are already in its room.
+  if (created) announceConversation(conversation);
+  broadcastMessage(message);
+
+  res.status(201).json({ message });
 };

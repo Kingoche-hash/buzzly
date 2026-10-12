@@ -1,18 +1,120 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { deleteStoryRequest, fetchStoryViewers } from '../services/story.service';
+import {
+  deleteStoryRequest,
+  fetchStoryViewers,
+  replyToStoryRequest,
+} from '../services/story.service';
 import { getDisplayName } from '../utils/conversation';
+import { getErrorMessage } from '../utils/getErrorMessage';
 import { getStoryBackground } from '../utils/storyBackgrounds';
 import { timeAgo } from '../utils/timeAgo';
 import Avatar from './Avatar';
 
 const STORY_MS = 5000; // each story shows for 5 seconds
+const REACTIONS = ['❤️', '😂', '😮', '😢', '👏', '🔥'];
 
 // Start at the first story you have not seen yet.
 const firstUnviewed = (group) => {
   const index = group.stories.findIndex((story) => !story.viewed);
   return index === -1 ? 0 : index;
 };
+
+// The reply box at the bottom of someone else's story.
+// It is re-created for every story (see `key` below), so its text never leaks into the next story.
+function ReplyBar({ storyId, onFocusChange }) {
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [note, setNote] = useState(null);
+  const inputRef = useRef(null);
+
+  // The little "Reply sent" message disappears by itself.
+  useEffect(() => {
+    if (!note) return;
+
+    const timer = setTimeout(() => setNote(null), 2500);
+    return () => clearTimeout(timer);
+  }, [note]);
+
+  const send = async (content) => {
+    const reply = content.trim();
+    if (!reply || sending) return;
+
+    setSending(true);
+    setNote(null);
+
+    try {
+      await replyToStoryRequest(storyId, reply);
+      setText('');
+      setNote({ text: 'Reply sent ✓', error: false });
+      inputRef.current?.blur(); // the story carries on playing
+    } catch (err) {
+      setNote({ text: getErrorMessage(err), error: true });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    send(text);
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/70 to-transparent px-3 pb-3 pt-8"
+    >
+      <div className="pointer-events-auto">
+        {note && (
+          <p
+            role="status"
+            className={`mb-2 text-center text-xs ${note.error ? 'text-red-300' : 'text-green-300'}`}
+          >
+            {note.text}
+          </p>
+        )}
+
+        <div className="mb-2 flex justify-center gap-2">
+          {REACTIONS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              disabled={sending}
+              onClick={() => send(emoji)}
+              aria-label={`React with ${emoji}`}
+              className="rounded-full bg-black/40 px-2 py-1 text-lg hover:bg-black/60 disabled:opacity-50"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={text}
+            maxLength={500}
+            onChange={(event) => setText(event.target.value)}
+            onFocus={() => onFocusChange(true)}
+            onBlur={() => onFocusChange(false)}
+            placeholder="Reply to this story..."
+            aria-label="Reply to this story"
+            className="min-w-0 flex-1 rounded-full border border-white/40 bg-black/30 px-4 py-2 text-sm text-white placeholder-white/60 outline-none focus:border-white"
+          />
+          <button
+            type="submit"
+            disabled={!text.trim() || sending}
+            className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {sending ? '...' : 'Send'}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
 
 export default function StoryViewer({ groups, startIndex, onClose, onViewed, onDeleted }) {
   const { user } = useAuth();
@@ -62,6 +164,12 @@ export default function StoryViewer({ groups, startIndex, onClose, onViewed, onD
     setCycle((value) => value + 1); // already at the very first story: start it again
   }, [groups, groupIndex, storyIndex]);
 
+  // While someone types a reply the story waits; when they stop, it gets its 5 seconds again.
+  const handleReplyFocus = useCallback((focused) => {
+    setPaused(focused);
+    if (!focused) setCycle((value) => value + 1);
+  }, []);
+
   // If the story disappeared (deleted or expired), close.
   useEffect(() => {
     if (!story) onClose();
@@ -83,10 +191,20 @@ export default function StoryViewer({ groups, startIndex, onClose, onViewed, onD
     if (storyId && !isOwn && !alreadyViewed) onViewed(storyId);
   }, [storyId, isOwn, alreadyViewed, onViewed]);
 
-  // Keyboard: arrows and Escape.
+  // Keyboard: arrows and Escape. While typing a reply, the arrows just move the cursor.
   useEffect(() => {
     const handleKey = (event) => {
-      if (event.key === 'Escape') onClose();
+      const tag = event.target?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA';
+
+      if (event.key === 'Escape') {
+        if (typing) event.target.blur();
+        else onClose();
+        return;
+      }
+
+      if (typing) return;
+
       if (event.key === 'ArrowRight') goNext();
       if (event.key === 'ArrowLeft') goPrev();
     };
@@ -180,7 +298,11 @@ export default function StoryViewer({ groups, startIndex, onClose, onViewed, onD
         </div>
 
         {story.type === 'image' && story.text && (
-          <p className="absolute inset-x-0 bottom-16 z-10 bg-black/50 px-4 py-3 text-center text-sm text-white">
+          <p
+            className={`absolute inset-x-0 z-10 bg-black/50 px-4 py-3 text-center text-sm text-white ${
+              isOwn ? 'bottom-16' : 'bottom-36'
+            }`}
+          >
             {story.text}
           </p>
         )}
@@ -197,6 +319,8 @@ export default function StoryViewer({ groups, startIndex, onClose, onViewed, onD
           aria-label="Next story"
           className="absolute inset-y-20 right-0 z-[5] w-2/3"
         />
+
+        {!isOwn && <ReplyBar key={story._id} storyId={story._id} onFocusChange={handleReplyFocus} />}
 
         {isOwn && (
           <div className="absolute inset-x-0 bottom-0 z-10 flex items-center justify-between px-4 py-3 text-white">

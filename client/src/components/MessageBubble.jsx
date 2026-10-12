@@ -3,6 +3,7 @@ import { getDisplayName } from '../utils/conversation';
 import { formatTime } from '../utils/formatTime';
 import AttachmentList from './AttachmentList';
 import MessageStatus from './MessageStatus';
+import StoryQuote from './StoryQuote';
 
 // One chat bubble. memo() means it redraws only when ITS OWN message changes,
 // not every time someone starts typing or goes online.
@@ -17,6 +18,8 @@ function MessageBubble({ message, mine, showSender, status, glowing }) {
         {showSender && (
           <p className="text-xs font-semibold text-emerald-300">{getDisplayName(message.sender)}</p>
         )}
+
+        {message.storyReply && <StoryQuote reply={message.storyReply} mine={mine} />}
 
         <AttachmentList attachments={message.attachments} />
 

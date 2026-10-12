@@ -10,3 +10,6 @@ export const createStorySchema = z.object({
 export const storyIdParams = z.object({
   storyId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid id'),
 });
+export const replyStorySchema = z.object({
+  content: z.string().trim().min(1, 'Write a reply').max(500, 'A reply can have at most 500 characters'),
+});

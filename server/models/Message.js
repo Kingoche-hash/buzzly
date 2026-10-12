@@ -13,12 +13,25 @@ const attachmentSchema = new Schema(
   { _id: false }
 );
 
+// What a reply remembers about the story, because the story itself disappears after 24 hours.
+const storyReplySchema = new Schema(
+  {
+    story: { type: Schema.Types.ObjectId, ref: 'Story' },
+    type: { type: String, enum: ['text', 'image'] },
+    text: { type: String, maxlength: 280, default: '' },
+    background: { type: String, default: 'emerald' },
+    imageUrl: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
 const messageSchema = new Schema(
   {
     conversation: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true },
     sender: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     content: { type: String, trim: true, maxlength: 4000, default: '' },
     attachments: { type: [attachmentSchema], default: [] },
+    storyReply: { type: storyReplySchema, default: undefined },
     deliveredTo: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     readBy: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   },

@@ -28,3 +28,9 @@ export const fetchStoryViewers = async (storyId) => {
 export const deleteStoryRequest = async (storyId) => {
   await api.delete(`/stories/${storyId}`);
 };
+
+// Replies to someone's story. It arrives in your chat with them as a normal message.
+export const replyToStoryRequest = async (storyId, content) => {
+  const res = await api.post(`/stories/${storyId}/reply`, { content });
+  return res.data.message;
+};

@@ -35,3 +35,12 @@ export const searchLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Too many searches, please slow down' },
 });
+
+// Story replies become messages, so they get their own ceiling.
+export const replyLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: production ? 30 : 200,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'You are replying too fast, please slow down' },
+});

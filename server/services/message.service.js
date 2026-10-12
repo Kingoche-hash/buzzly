@@ -7,7 +7,13 @@ import { getConversationForMember } from './conversation.service.js';
 const SENDER_FIELDS = 'username displayName avatar';
 
 // A message needs text, files, or both.
-export const createMessage = async ({ conversationId, senderId, content = '', attachments = [] }) => {
+export const createMessage = async ({
+  conversationId,
+  senderId,
+  content = '',
+  attachments = [],
+  storyReply,
+}) => {
   if (!content && attachments.length === 0) {
     throw new AppError('Message cannot be empty', 400);
   }
@@ -19,6 +25,7 @@ export const createMessage = async ({ conversationId, senderId, content = '', at
     sender: senderId,
     content,
     attachments,
+    storyReply,
   });
 
   await Conversation.updateOne(
