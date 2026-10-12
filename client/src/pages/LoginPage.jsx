@@ -29,7 +29,7 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthLayout title="Welcome back" subtitle="Log in to continue to CHATAPP">
+    <AuthLayout title="Welcome back" subtitle="Log in to continue to Buzzly">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="email" className="block text-sm mb-1">Email</label>

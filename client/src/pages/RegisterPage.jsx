@@ -30,7 +30,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <AuthLayout title="Create your account" subtitle="Join CHATAPP in a few seconds">
+    <AuthLayout title="Create your account" subtitle="Join Buzzly in a few seconds">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="username" className="block text-sm mb-1">Username</label>

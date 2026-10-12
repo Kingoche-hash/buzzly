@@ -55,14 +55,14 @@ export default function ChatPage() {
   // Pop-ups and desktop notifications for chats that are not in front.
   useMessageNotifications({ conversations, activeId, onOpen: handleSelect });
 
-  // The browser tab shows the number of unread messages, like "(3) CHATAPP".
+  // The browser tab shows the number of unread messages, like "(3) Buzzly".
   const totalUnread = getUnreadTotal(conversations);
 
   useEffect(() => {
-    document.title = totalUnread > 0 ? `(${totalUnread}) CHATAPP` : 'CHATAPP';
+    document.title = totalUnread > 0 ? `(${totalUnread}) Buzzly` : 'Buzzly';
 
     return () => {
-      document.title = 'CHATAPP';
+      document.title = 'Buzzly';
     };
   }, [totalUnread]);
 
@@ -101,7 +101,7 @@ export default function ChatPage() {
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-slate-500">
               <p className="text-5xl" aria-hidden="true">💬</p>
-              <p className="font-medium text-slate-300">Welcome to CHATAPP</p>
+              <p className="font-medium text-slate-300">Welcome to Buzzly</p>
               <p className="text-sm">Select a conversation, or press ✏️ New to start one.</p>
             </div>
           )}
