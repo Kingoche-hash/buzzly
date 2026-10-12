@@ -10,6 +10,7 @@ import { userRoom } from '../socket/emitters.js';
 import { getIO } from '../socket/io.js';
 import { broadcastProfileUpdate, broadcastVisibilityChange } from '../socket/presence.js';
 import { AppError } from '../utils/AppError.js';
+import { removeUserContent } from '../services/post.service.js';
 import { signToken } from '../utils/token.js';
 
 export const updateMyProfile = async (req, res) => {
@@ -61,6 +62,11 @@ export const changeMyPassword = async (req, res) => {
 
 export const deleteMyAccount = async (req, res) => {
   await deleteAccount(req.user._id, req.body.password);
+
+  // Their posts, comments and likes go too. A failure here must not undo the deletion.
+  await removeUserContent(req.user._id).catch((error) =>
+    console.error('Could not remove the content of a deleted account:', error.message)
+  );
 
   // Hang up every open connection of this person.
   getIO()?.in(userRoom(req.user._id.toString())).disconnectSockets(true);

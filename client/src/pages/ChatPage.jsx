@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ConnectionBanner from '../components/ConnectionBanner';
 import MessagePane from '../components/MessagePane';
 import Sidebar from '../components/Sidebar';
@@ -8,7 +9,14 @@ import { useMessageNotifications } from '../hooks/useMessageNotifications';
 import { createGroupConversation, startDirectConversation } from '../services/chat.service';
 import { getUnreadTotal } from '../utils/conversationFilters';
 
+// The feed downloads only when someone opens it.
+const FeedPanel = lazy(() => import('../components/FeedPanel'));
+
 export default function ChatPage() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const onFeed = pathname === '/feed';
+
   const [activeId, setActiveId] = useState(null);
 
   // Set when the person clicks a search result: which message to open the chat around.
@@ -23,14 +31,21 @@ export default function ChatPage() {
   const active = conversations.find((c) => c._id === activeId) || null;
   const aroundId = jump && active && jump.conversationId === active._id ? jump.messageId : null;
 
+  // Opening a chat always leaves the feed.
+  const leaveFeed = () => {
+    if (onFeed) navigate('/');
+  };
+
   const handleSelect = (id) => {
     setJump(null);
     setActiveId(id);
+    leaveFeed();
   };
 
   const handleOpenResult = (result) => {
     setJump({ conversationId: result.conversation, messageId: result._id, nonce: Date.now() });
     setActiveId(result.conversation);
+    leaveFeed();
   };
 
   const handleStartChat = async (userId) => {
@@ -38,6 +53,7 @@ export default function ChatPage() {
     addConversation(conversation);
     setJump(null);
     setActiveId(conversation._id);
+    leaveFeed();
   };
 
   const handleCreateGroup = async ({ name, memberIds }) => {
@@ -45,6 +61,7 @@ export default function ChatPage() {
     addConversation(conversation);
     setJump(null);
     setActiveId(conversation._id);
+    leaveFeed();
   };
 
   // "Try again" inside a chat: opening it afresh loads its messages again.
@@ -66,13 +83,16 @@ export default function ChatPage() {
     };
   }, [totalUnread]);
 
+  // On a phone, only one thing is on screen: the list, a chat, or the feed.
+  const showingDetail = Boolean(active) || onFeed;
+
   return (
     <div className="flex h-dvh flex-col bg-slate-900 text-slate-100">
       <ConnectionBanner />
 
       <div className="flex min-h-0 flex-1">
         <Sidebar
-          className={active ? 'hidden md:flex' : 'flex'}
+          className={showingDetail ? 'hidden md:flex' : 'flex'}
           conversations={conversations}
           activeConversation={active}
           loading={loading}
@@ -86,8 +106,24 @@ export default function ChatPage() {
           onRetry={reload}
         />
 
-        <main className={`${active ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1`}>
-          {active ? (
+        <main className={`${showingDetail ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1`}>
+          {onFeed ? (
+            <Suspense
+              fallback={
+                <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
+                  Loading...
+                </div>
+              }
+            >
+              <FeedPanel
+                onBack={() => {
+                  setActiveId(null);
+                  navigate('/');
+                }}
+                onStartChat={handleStartChat}
+              />
+            </Suspense>
+          ) : active ? (
             <MessagePane
               key={`${active._id}:${jump?.nonce ?? 'latest'}`}
               conversation={active}

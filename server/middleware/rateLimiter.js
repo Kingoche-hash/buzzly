@@ -44,3 +44,21 @@ export const replyLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'You are replying too fast, please slow down' },
 });
+
+// New posts are rare, so the ceiling is low.
+export const postLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: production ? 20 : 200,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'You are posting too often, please try again later' },
+});
+
+// Comments and reports.
+export const commentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: production ? 20 : 200,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'You are doing that too fast, please slow down' },
+});

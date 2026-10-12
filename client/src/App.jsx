@@ -14,7 +14,9 @@ export default function App() {
       </Route>
 
       <Route element={<ProtectedRoute />}>
+        {/* The chat list stays on screen in both, so messages keep arriving while you browse the feed. */}
         <Route path="/" element={<ChatPage />} />
+        <Route path="/feed" element={<ChatPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -10,6 +10,7 @@ import profileRoutes from './routes/profile.routes.js';
 import conversationRoutes from './routes/conversation.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import storyRoutes from './routes/story.routes.js';
+import postRoutes from './routes/post.routes.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
@@ -35,6 +36,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/stories', storyRoutes);
+app.use('/api/posts', postRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { usePresence } from '../hooks/usePresence';
 import { useSocket } from '../hooks/useSocket';
@@ -120,6 +121,14 @@ export default function Sidebar({
           >
             🎨
           </button>
+          <Link
+            to="/feed"
+            aria-label="Open the feed"
+            title="Feed"
+            className="rounded-lg bg-slate-700 px-3 py-1 text-sm hover:bg-slate-600"
+          >
+            📸
+          </Link>
           <button
             onClick={logout}
             className="rounded-lg bg-slate-700 px-3 py-1 text-sm hover:bg-slate-600"
