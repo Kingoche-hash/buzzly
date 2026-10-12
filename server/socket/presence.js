@@ -59,7 +59,7 @@ export const handlePresenceDisconnect = async (io, socket) => {
       } catch (error) {
         console.error('Presence offline error:', error.message);
       }
-    }, OFFLINE_GRACE_MS);
+    }, OFFLINE_GRACE_MS).unref();
   } catch (error) {
     console.error('Presence disconnect error:', error.message);
   }

@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test --test-concurrency=1 --test-timeout=60000 --test-force-exit --import ./tests/setup.js"
   },
   "keywords": [],
   "author": "",
@@ -27,6 +28,8 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "socket.io-client": "^4.8.4"
+    "ioredis-mock": "^8.13.1",
+    "socket.io-client": "^4.8.4",
+    "supertest": "^7.3.1"
   }
 }
