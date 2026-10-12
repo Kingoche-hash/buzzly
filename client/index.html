@@ -5,6 +5,20 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Buzzly</title>
+    <!-- Applies the saved theme before the page draws, so there is no flash of the wrong colours. -->
+    <script>
+      (function () {
+        try {
+          var setting = localStorage.getItem('buzzly-theme') || 'autumn';
+          var theme = setting;
+          if (setting === 'auto') {
+            var month = new Date().getMonth();
+            theme = month >= 2 && month <= 4 ? 'spring' : month >= 5 && month <= 7 ? 'summer' : month >= 8 && month <= 10 ? 'autumn' : 'winter';
+          }
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

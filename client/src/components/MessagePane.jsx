@@ -155,7 +155,7 @@ export default function MessagePane({
 
       <div
         className="flex-1 overflow-y-auto px-4 py-4 space-y-2"
-        style={getWallpaperStyle(state.wallpaper)}
+        style={getWallpaperStyle(state.wallpaper, conversation.state?.wallpaperUrl)}
       >
         {hasMore && (
           <div className="text-center">

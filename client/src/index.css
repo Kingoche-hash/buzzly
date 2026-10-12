@@ -1,14 +1,144 @@
 @import "tailwindcss";
 
+/* ==================================================================
+   THEMES
+   Every colour in the app is a Tailwind name such as bg-slate-800 or bg-emerald-600,
+   and Tailwind turns each name into a CSS variable. Here we give those variables new
+   values for each season, so the whole app changes at once.
+
+   "slate"   = the neutral colours (backgrounds, borders, text)
+   "emerald" = the accent colour (buttons, my messages, links)
+
+   No data-theme at all means Autumn. "classic" has no overrides: it is the original look.
+   ================================================================== */
+
+/* AUTUMN: roasted browns, cream text, copper and amber */
+html:not([data-theme]),
+html[data-theme='autumn'] {
+  --color-slate-50: #fdf8f3;
+  --color-slate-100: #f6ece0;
+  --color-slate-200: #e9d8c3;
+  --color-slate-300: #d3bb9f;
+  --color-slate-400: #b39a7f;
+  --color-slate-500: #9b836a;
+  --color-slate-600: #5f4a3b;
+  --color-slate-700: #473529;
+  --color-slate-800: #34261d;
+  --color-slate-900: #251b15;
+  --color-slate-950: #17100c;
+
+  --color-emerald-100: #fde8d2;
+  --color-emerald-200: #fbd2a8;
+  --color-emerald-300: #f6b97c;
+  --color-emerald-400: #ee9a4d;
+  --color-emerald-500: #c2601f;
+  --color-emerald-600: #a8501a;
+  --color-emerald-700: #8a4115;
+  --color-emerald-800: #6b3211;
+  --color-emerald-900: #4d240d;
+}
+
+/* WINTER: frosty blue-greys and glacier blue */
+html[data-theme='winter'] {
+  --color-slate-50: #f4f8fb;
+  --color-slate-100: #e6eef5;
+  --color-slate-200: #cfdce8;
+  --color-slate-300: #aebfd0;
+  --color-slate-400: #8aa0b6;
+  --color-slate-500: #6f879d;
+  --color-slate-600: #465a6e;
+  --color-slate-700: #324458;
+  --color-slate-800: #223245;
+  --color-slate-900: #162232;
+  --color-slate-950: #0d1621;
+
+  --color-emerald-100: #def2fb;
+  --color-emerald-200: #bfe6f7;
+  --color-emerald-300: #8fd2f0;
+  --color-emerald-400: #5dbbe6;
+  --color-emerald-500: #2386be;
+  --color-emerald-600: #1976a8;
+  --color-emerald-700: #135d86;
+  --color-emerald-800: #0f4767;
+  --color-emerald-900: #0b3350;
+}
+
+/* SUMMER: deep sea blue and warm coral */
+html[data-theme='summer'] {
+  --color-slate-50: #f2fbfa;
+  --color-slate-100: #e0f4f2;
+  --color-slate-200: #c1e6e2;
+  --color-slate-300: #96d0ca;
+  --color-slate-400: #6fb5ae;
+  --color-slate-500: #58a199;
+  --color-slate-600: #2f6f6c;
+  --color-slate-700: #1f5558;
+  --color-slate-800: #144046;
+  --color-slate-900: #0c2f35;
+  --color-slate-950: #072126;
+
+  --color-emerald-100: #ffe9e5;
+  --color-emerald-200: #ffd6d0;
+  --color-emerald-300: #ffb3a8;
+  --color-emerald-400: #ff8c7c;
+  --color-emerald-500: #d24a3c;
+  --color-emerald-600: #b53a2f;
+  --color-emerald-700: #922e26;
+  --color-emerald-800: #70241e;
+  --color-emerald-900: #511a16;
+}
+
+/* SPRING: mossy greens and blossom pink */
+html[data-theme='spring'] {
+  --color-slate-50: #f5faf1;
+  --color-slate-100: #e8f2e0;
+  --color-slate-200: #d0e3c3;
+  --color-slate-300: #b0cc9f;
+  --color-slate-400: #8fb07b;
+  --color-slate-500: #719260;
+  --color-slate-600: #4b6a3f;
+  --color-slate-700: #38502f;
+  --color-slate-800: #283b22;
+  --color-slate-900: #1b2a18;
+  --color-slate-950: #111b0f;
+
+  --color-emerald-100: #fde7f1;
+  --color-emerald-200: #fbd0e3;
+  --color-emerald-300: #f7a8cb;
+  --color-emerald-400: #f27cb0;
+  --color-emerald-500: #cc4783;
+  --color-emerald-600: #b13a6f;
+  --color-emerald-700: #8c2e58;
+  --color-emerald-800: #6a2343;
+  --color-emerald-900: #4c1a31;
+}
+
+/* ================================================================== */
+
 html {
   color-scheme: dark;
+  accent-color: var(--color-emerald-500); /* checkboxes follow the theme */
+}
+
+body {
+  background-color: var(--color-slate-900);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-600) transparent;
+}
+
+::selection {
+  background-color: var(--color-emerald-600);
+  color: #fff;
 }
 
 /* A clear outline when moving around with the keyboard. */
 button:focus-visible,
 a:focus-visible,
 select:focus-visible {
-  outline: 2px solid #34d399;
+  outline: 2px solid var(--color-emerald-400);
   outline-offset: 2px;
 }
 

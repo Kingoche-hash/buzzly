@@ -12,6 +12,11 @@ const conversationStateSchema = new Schema(
     spam: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
     wallpaper: { type: String, default: 'default' },
+    // When `wallpaper` is 'photo', this is the picture the person uploaded.
+    wallpaperImage: {
+      url: { type: String },
+      publicId: { type: String },
+    },
   },
   { timestamps: true }
 );

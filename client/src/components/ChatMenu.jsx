@@ -54,6 +54,12 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
     }
   };
 
+  // Uploads a photo and keeps the picker open (with progress) until it is done.
+  const choosePhoto = async (file) => {
+    await onUpdate({ wallpaperFile: file });
+    setDialog(null);
+  };
+
   return (
     <div ref={menuRef} className="relative ml-auto">
       <button
@@ -147,7 +153,9 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
       {dialog === 'wallpaper' && (
         <WallpaperPicker
           current={state.wallpaper}
+          photoUrl={conversation.state?.wallpaperUrl}
           onChoose={(key) => apply({ wallpaper: key })}
+          onChoosePhoto={choosePhoto}
           onClose={() => setDialog(null)}
         />
       )}

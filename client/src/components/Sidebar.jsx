@@ -19,6 +19,7 @@ import StoriesRow from './StoriesRow';
 const NewChatDialog = lazy(() => import('./NewChatDialog'));
 const ProfileDialog = lazy(() => import('./ProfileDialog'));
 const SearchPanel = lazy(() => import('./SearchPanel'));
+const ThemePicker = lazy(() => import('./ThemePicker'));
 
 const tabClass = (selected) =>
   `flex-1 py-2 text-sm font-medium ${
@@ -57,6 +58,7 @@ export default function Sidebar({
   const [filter, setFilter] = useState('all');
   const [showNewChat, setShowNewChat] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
 
   // Desktop notifications need the person's permission first.
   const [permission, setPermission] = useState(() =>
@@ -101,19 +103,30 @@ export default function Sidebar({
             <span className="flex items-center gap-1 text-xs text-slate-400">
               <span
                 className={`inline-block h-2 w-2 rounded-full ${
-                  connected ? 'bg-emerald-400' : 'bg-amber-400'
+                  connected ? 'bg-green-400' : 'bg-amber-400'
                 }`}
               />
               {connected ? 'Live' : 'Connecting...'}
             </span>
           </span>
         </button>
-        <button
-          onClick={logout}
-          className="rounded-lg bg-slate-700 px-3 py-1 text-sm hover:bg-slate-600"
-        >
-          Log out
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowTheme(true)}
+            aria-label="Change appearance"
+            title="Appearance"
+            className="rounded-lg bg-slate-700 px-3 py-1 text-sm hover:bg-slate-600"
+          >
+            🎨
+          </button>
+          <button
+            onClick={logout}
+            className="rounded-lg bg-slate-700 px-3 py-1 text-sm hover:bg-slate-600"
+          >
+            Log out
+          </button>
+        </div>
       </div>
 
       {permission === 'default' && (
@@ -283,6 +296,7 @@ export default function Sidebar({
         )}
 
         {showProfile && <ProfileDialog onClose={() => setShowProfile(false)} />}
+        {showTheme && <ThemePicker onClose={() => setShowTheme(false)} />}
       </Suspense>
     </aside>
   );

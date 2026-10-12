@@ -50,7 +50,7 @@ export default function Avatar({ name = '?', src = '', size = 'md', online = nul
           role="img"
           aria-label={online ? 'Online' : 'Offline'}
           className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-slate-800 ${
-            online ? 'bg-emerald-400' : 'bg-slate-500'
+            online ? 'bg-green-400' : 'bg-slate-500'
           }`}
         />
       )}

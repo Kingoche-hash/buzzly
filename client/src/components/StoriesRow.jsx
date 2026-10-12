@@ -8,8 +8,10 @@ import Avatar from './Avatar';
 const StoryComposer = lazy(() => import('./StoryComposer'));
 const StoryViewer = lazy(() => import('./StoryViewer'));
 
-const RING_NEW = { backgroundImage: 'linear-gradient(45deg, #34d399, #0ea5e9)' };
-const RING_SEEN = { backgroundColor: '#475569' };
+const RING_NEW = {
+  backgroundImage: 'linear-gradient(45deg, var(--color-emerald-300), var(--color-emerald-600))',
+};
+const RING_SEEN = { backgroundColor: 'var(--color-slate-600)' };
 
 // One round picture in the row. `ring` is 'new', 'seen' or 'none'.
 function Tile({ name, src, ring, onClick, onPlus }) {

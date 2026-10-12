@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchConversations, updateConversationStateRequest } from '../services/chat.service';
+import {
+  fetchConversations,
+  setWallpaperPhotoRequest,
+  updateConversationStateRequest,
+} from '../services/chat.service';
 import { getErrorMessage } from '../utils/getErrorMessage';
 import { useAuth } from './useAuth';
 import { useSocket } from './useSocket';
@@ -144,7 +148,10 @@ export const useConversations = (activeId = null) => {
 
   // patch: { pinned, muted, spam, deleted, wallpaper } (any of them).
   const updateState = useCallback(async (conversationId, patch) => {
-    const state = await updateConversationStateRequest(conversationId, patch);
+    // A photo wallpaper travels as a file, everything else as a small change.
+    const state = patch.wallpaperFile
+      ? await setWallpaperPhotoRequest(conversationId, patch.wallpaperFile)
+      : await updateConversationStateRequest(conversationId, patch);
 
     setConversations((prev) => prev.map((c) => (c._id === conversationId ? { ...c, state } : c)));
   }, []);

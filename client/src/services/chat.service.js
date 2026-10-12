@@ -57,3 +57,11 @@ export const sendFilesRequest = async (conversationId, files, content, onProgres
 
   return res.data.message;
 };
+// Uses my own photo as the wallpaper of one chat.
+export const setWallpaperPhotoRequest = async (conversationId, file) => {
+  const form = new FormData();
+  form.append('image', file);
+
+  const res = await api.post(`/conversations/${conversationId}/wallpaper`, form, { timeout: 60000 });
+  return res.data.state;
+};

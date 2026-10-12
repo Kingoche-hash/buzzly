@@ -1,6 +1,27 @@
 // The wallpapers you can choose. Each is just a CSS background.
+// "default", "dots" and "grid" use the theme's own colours, so they match every season.
 export const WALLPAPERS = [
-  { key: 'default', name: 'Default', style: { backgroundColor: '#0f172a' } },
+  { key: 'default', name: 'Default', style: { backgroundColor: 'var(--color-slate-900)' } },
+  {
+    key: 'autumn',
+    name: 'Autumn',
+    style: { backgroundImage: 'linear-gradient(160deg, #7a3b14, #2a1a12 80%)' },
+  },
+  {
+    key: 'winter',
+    name: 'Winter',
+    style: { backgroundImage: 'linear-gradient(160deg, #1d4a6b, #0d1621 80%)' },
+  },
+  {
+    key: 'summer',
+    name: 'Summer',
+    style: { backgroundImage: 'linear-gradient(160deg, #0f6b73, #072126 75%)' },
+  },
+  {
+    key: 'spring',
+    name: 'Spring',
+    style: { backgroundImage: 'linear-gradient(160deg, #7a3a5e, #1b2a18 85%)' },
+  },
   {
     key: 'ocean',
     name: 'Ocean',
@@ -30,8 +51,8 @@ export const WALLPAPERS = [
     key: 'dots',
     name: 'Dots',
     style: {
-      backgroundColor: '#0f172a',
-      backgroundImage: 'radial-gradient(#334155 1.2px, transparent 1.2px)',
+      backgroundColor: 'var(--color-slate-900)',
+      backgroundImage: 'radial-gradient(var(--color-slate-700) 1.2px, transparent 1.2px)',
       backgroundSize: '22px 22px',
     },
   },
@@ -39,13 +60,24 @@ export const WALLPAPERS = [
     key: 'grid',
     name: 'Grid',
     style: {
-      backgroundColor: '#0f172a',
+      backgroundColor: 'var(--color-slate-900)',
       backgroundImage:
-        'linear-gradient(#1e293b 1px, transparent 1px), linear-gradient(90deg, #1e293b 1px, transparent 1px)',
+        'linear-gradient(var(--color-slate-800) 1px, transparent 1px), linear-gradient(90deg, var(--color-slate-800) 1px, transparent 1px)',
       backgroundSize: '28px 28px',
     },
   },
 ];
 
-export const getWallpaperStyle = (key) =>
-  (WALLPAPERS.find((wallpaper) => wallpaper.key === key) || WALLPAPERS[0]).style;
+// `key` is 'photo' when the person uploaded their own picture, and `photoUrl` is that picture.
+export const getWallpaperStyle = (key, photoUrl = '') => {
+  if (key === 'photo' && photoUrl) {
+    return {
+      // A dark layer over the photo keeps the messages readable.
+      backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url("${photoUrl}")`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    };
+  }
+
+  return (WALLPAPERS.find((wallpaper) => wallpaper.key === key) || WALLPAPERS[0]).style;
+};

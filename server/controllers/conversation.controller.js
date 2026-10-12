@@ -5,8 +5,9 @@ import {
   getConversation,
   getConversationForMember,
 } from '../services/conversation.service.js';
-import { updateState } from '../services/conversationState.service.js';
+import { setWallpaperPhoto, updateState } from '../services/conversationState.service.js';
 import { announceConversation, emitConversationState } from '../socket/emitters.js';
+import { AppError } from '../utils/AppError.js';
 
 export const createConversation = async (req, res) => {
   const body = req.body;
@@ -39,6 +40,19 @@ export const updateConversationState = async (req, res) => {
   const state = await updateState(req.user._id, req.params.conversationId, req.body);
 
   // Tell my other open windows, so they stay in sync.
+  emitConversationState(req.user._id, req.params.conversationId, state);
+
+  res.status(200).json({ state });
+};
+
+// Uses my own photo as the wallpaper of this chat.
+export const setConversationWallpaper = async (req, res) => {
+  if (!req.file) {
+    throw new AppError('Choose a photo', 400);
+  }
+
+  const state = await setWallpaperPhoto(req.user._id, req.params.conversationId, req.file);
+
   emitConversationState(req.user._id, req.params.conversationId, state);
 
   res.status(200).json({ state });

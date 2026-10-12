@@ -9,6 +9,10 @@ export const WALLPAPER_KEYS = [
   'rose',
   'dots',
   'grid',
+  'autumn',
+  'winter',
+  'summer',
+  'spring',
 ];
 
 export const stateUpdateSchema = z
