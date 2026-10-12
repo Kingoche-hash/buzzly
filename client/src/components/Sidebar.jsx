@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { usePresence } from '../hooks/usePresence';
 import { useSocket } from '../hooks/useSocket';
@@ -12,11 +12,13 @@ import { formatTyping } from '../utils/formatTyping';
 import { getMessagePreview } from '../utils/messagePreview';
 import Avatar from './Avatar';
 import FilterMenu from './FilterMenu';
-import NewChatDialog from './NewChatDialog';
-import ProfileDialog from './ProfileDialog';
-import SearchPanel from './SearchPanel';
 import { ConversationListSkeleton } from './Skeleton';
 import StoriesRow from './StoriesRow';
+
+// These parts download only when the person first opens them.
+const NewChatDialog = lazy(() => import('./NewChatDialog'));
+const ProfileDialog = lazy(() => import('./ProfileDialog'));
+const SearchPanel = lazy(() => import('./SearchPanel'));
 
 const tabClass = (selected) =>
   `flex-1 py-2 text-sm font-medium ${
@@ -134,11 +136,13 @@ export default function Sidebar({
       </div>
 
       {tab === 'search' ? (
-        <SearchPanel
-          conversations={conversations}
-          activeConversation={activeConversation}
-          onOpen={onOpenResult}
-        />
+        <Suspense fallback={<p className="px-4 py-6 text-sm text-slate-400">Loading...</p>}>
+          <SearchPanel
+            conversations={conversations}
+            activeConversation={activeConversation}
+            onOpen={onOpenResult}
+          />
+        </Suspense>
       ) : (
         <>
           <StoriesRow />
@@ -269,15 +273,17 @@ export default function Sidebar({
         </>
       )}
 
-      {showNewChat && (
-        <NewChatDialog
-          onClose={() => setShowNewChat(false)}
-          onStartChat={onStartChat}
-          onCreateGroup={onCreateGroup}
-        />
-      )}
+      <Suspense fallback={null}>
+        {showNewChat && (
+          <NewChatDialog
+            onClose={() => setShowNewChat(false)}
+            onStartChat={onStartChat}
+            onCreateGroup={onCreateGroup}
+          />
+        )}
 
-      {showProfile && <ProfileDialog onClose={() => setShowProfile(false)} />}
+        {showProfile && <ProfileDialog onClose={() => setShowProfile(false)} />}
+      </Suspense>
     </aside>
   );
 }

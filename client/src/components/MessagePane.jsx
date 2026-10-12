@@ -5,19 +5,17 @@ import { usePresence } from '../hooks/usePresence';
 import { useReadReceipts } from '../hooks/useReadReceipts';
 import { useTyping } from '../hooks/useTyping';
 import { useTypingEmitter } from '../hooks/useTypingEmitter';
-import { getConversationTitle, getDisplayName, getOtherMember } from '../utils/conversation';
+import { getConversationTitle, getOtherMember } from '../utils/conversation';
 import { getState, isMuted } from '../utils/conversationFilters';
 import { dayKey, formatDayLabel } from '../utils/formatDay';
 import { formatLastSeen } from '../utils/formatLastSeen';
-import { formatTime } from '../utils/formatTime';
 import { formatTyping } from '../utils/formatTyping';
 import { getMessageStatus } from '../utils/messageStatus';
 import { getWallpaperStyle } from '../utils/wallpapers';
-import AttachmentList from './AttachmentList';
 import Avatar from './Avatar';
 import ChatMenu from './ChatMenu';
+import MessageBubble from './MessageBubble';
 import MessageComposer from './MessageComposer';
-import MessageStatus from './MessageStatus';
 import { MessageListSkeleton } from './Skeleton';
 import UserProfileDialog from './UserProfileDialog';
 
@@ -196,7 +194,6 @@ export default function MessagePane({
 
         {messages.map((message, index) => {
           const mine = message.sender._id === user._id;
-          const glowing = highlightId === message._id;
           const previous = messages[index - 1];
           const startsNewDay = !previous || dayKey(previous.createdAt) !== dayKey(message.createdAt);
 
@@ -210,32 +207,13 @@ export default function MessagePane({
                 </div>
               )}
 
-              <div id={`message-${message._id}`} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[85%] rounded-2xl px-3 py-2 transition-shadow sm:max-w-[75%] ${
-                    mine ? 'bg-emerald-600' : 'bg-slate-700'
-                  } ${glowing ? 'ring-2 ring-amber-300' : ''}`}
-                >
-                  {!mine && conversation.type === 'group' && (
-                    <p className="text-xs font-semibold text-emerald-300">
-                      {getDisplayName(message.sender)}
-                    </p>
-                  )}
-
-                  <AttachmentList attachments={message.attachments} />
-
-                  {message.content && (
-                    <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                  )}
-
-                  <p className="mt-1 flex items-center justify-end gap-1 text-[10px] text-slate-300/70">
-                    <span>{formatTime(message.createdAt)}</span>
-                    {mine && (
-                      <MessageStatus status={getMessageStatus(message, conversation, user._id)} />
-                    )}
-                  </p>
-                </div>
-              </div>
+              <MessageBubble
+                message={message}
+                mine={mine}
+                showSender={!mine && conversation.type === 'group'}
+                status={mine ? getMessageStatus(message, conversation, user._id) : 'sent'}
+                glowing={highlightId === message._id}
+              />
             </Fragment>
           );
         })}

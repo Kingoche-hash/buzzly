@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import { env } from './config/env.js';
 import healthRoutes from './routes/health.routes.js';
 import authRoutes from './routes/auth.routes.js';
@@ -19,6 +20,7 @@ app.set('trust proxy', env.trustProxy);
 app.disable('x-powered-by');
 
 app.use(helmet());
+app.use(compression());
 app.use(cors({ origin: env.clientUrls, credentials: true }));
 app.use(express.json({ limit: '10kb' }));
 

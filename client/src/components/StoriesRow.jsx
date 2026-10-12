@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useStories } from '../hooks/useStories';
 import { getDisplayName } from '../utils/conversation';
 import Avatar from './Avatar';
-import StoryComposer from './StoryComposer';
-import StoryViewer from './StoryViewer';
+
+// The full-screen viewer and the composer are only needed when opened, so they download on demand.
+const StoryComposer = lazy(() => import('./StoryComposer'));
+const StoryViewer = lazy(() => import('./StoryViewer'));
 
 const RING_NEW = { backgroundImage: 'linear-gradient(45deg, #34d399, #0ea5e9)' };
 const RING_SEEN = { backgroundColor: '#475569' };
@@ -79,17 +81,19 @@ export default function StoriesRow() {
         ))}
       </div>
 
-      {composing && <StoryComposer onClose={() => setComposing(false)} onPosted={reload} />}
+      <Suspense fallback={null}>
+        {composing && <StoryComposer onClose={() => setComposing(false)} onPosted={reload} />}
 
-      {viewing !== null && ordered[viewing] && (
-        <StoryViewer
-          groups={ordered}
-          startIndex={viewing}
-          onClose={() => setViewing(null)}
-          onViewed={markViewed}
-          onDeleted={reload}
-        />
-      )}
+        {viewing !== null && ordered[viewing] && (
+          <StoryViewer
+            groups={ordered}
+            startIndex={viewing}
+            onClose={() => setViewing(null)}
+            onViewed={markViewed}
+            onDeleted={reload}
+          />
+        )}
+      </Suspense>
     </>
   );
 }
