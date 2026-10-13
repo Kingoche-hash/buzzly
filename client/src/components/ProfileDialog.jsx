@@ -10,7 +10,7 @@ import {
 import { getDisplayName } from '../utils/conversation';
 import { getErrorMessage } from '../utils/getErrorMessage';
 import Avatar from './Avatar';
-import ConfirmDialog from './confirmDialog';
+import ConfirmDialog from './ConfirmDialog';
 import Modal from './Modal';
 
 const STATUS_SUGGESTIONS = ['Available', 'Busy', 'At work', 'In a meeting', 'Away'];

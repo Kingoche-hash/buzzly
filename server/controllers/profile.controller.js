@@ -4,7 +4,7 @@ import {
   removeAvatar,
   setAvatar,
   updateProfile,
-} from '../services/profile.Service.js';
+} from '../services/profile.service.js';
 import { getPrivacy, pickPrivacy, setPrivacy } from '../services/privacyCache.js';
 import { userRoom } from '../socket/emitters.js';
 import { getIO } from '../socket/io.js';

@@ -4,7 +4,7 @@ import { useToast } from '../hooks/useToast';
 import { getDisplayName } from '../utils/conversation';
 import { getState, isMuted } from '../utils/conversationFilters';
 import Avatar from './Avatar';
-import ConfirmDialog from './confirmDialog';
+import ConfirmDialog from './ConfirmDialog';
 import Modal from './Modal';
 import UserProfileDialog from './UserProfileDialog';
 import { blockUserRequest } from '../services/block.service';
