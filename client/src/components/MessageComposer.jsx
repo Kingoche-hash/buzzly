@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '../hooks/useAuth';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { ACCEPT, formatFileSize, validateFiles } from '../utils/attachments';
 import { getDisplayName } from '../utils/conversation';
+import { findMentionQuery } from '../utils/mentions';
 import { getMessagePreview } from '../utils/messagePreview';
+import Avatar from './Avatar';
 import EmojiPicker from './EmojiPicker';
 
+// members: the group's member list (to suggest @mentions), or null in a direct chat.
 export default function MessageComposer({
   onSend,
   onSendFiles,
@@ -15,19 +19,40 @@ export default function MessageComposer({
   editing = null,
   onCancelEdit,
   onSubmitEdit,
+  members = null,
 }) {
+  const { user } = useAuth();
+
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState(null);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [mention, setMention] = useState(null); // { query, start } while typing "@..."
+  const [mentionIndex, setMentionIndex] = useState(0);
 
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
   const emojiRef = useRef(null);
 
   useClickOutside(emojiRef, () => setShowEmoji(false), showEmoji);
+
+  // The members that match what is typed after the "@".
+  const suggestions = useMemo(() => {
+    if (!mention || !members) return [];
+
+    const query = mention.query.toLowerCase();
+
+    return members
+      .filter(
+        (member) =>
+          member._id !== user._id &&
+          (member.username.toLowerCase().includes(query) ||
+            (member.displayName || '').toLowerCase().includes(query))
+      )
+      .slice(0, 6);
+  }, [mention, members, user._id]);
 
   // Starting an edit puts the message's text in the box.
   useEffect(() => {
@@ -37,6 +62,7 @@ export default function MessageComposer({
     setFiles([]);
     setError('');
     setShowEmoji(false);
+    setMention(null);
     inputRef.current?.focus();
   }, [editing]);
 
@@ -45,14 +71,39 @@ export default function MessageComposer({
     if (replyingTo) inputRef.current?.focus();
   }, [replyingTo]);
 
+  const updateMention = (value, cursor) => {
+    setMention(members ? findMentionQuery(value, cursor) : null);
+    setMentionIndex(0);
+  };
+
   const handleChange = (event) => {
     const value = event.target.value;
     setText(value);
+    updateMention(value, event.target.selectionStart ?? value.length);
 
     if (editing) return;
 
     if (value.trim()) onTyping();
     else onStopTyping();
+  };
+
+  const pickMention = (member) => {
+    const input = inputRef.current;
+    const cursor = input?.selectionStart ?? text.length;
+    const next = `${text.slice(0, mention.start)}@${member.username} ${text.slice(cursor)}`;
+
+    if (next.length > 4000) return;
+
+    const position = mention.start + member.username.length + 2;
+
+    setText(next);
+    setMention(null);
+    if (!editing) onTyping();
+
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(position, position);
+    });
   };
 
   const handleCancelEdit = () => {
@@ -62,6 +113,32 @@ export default function MessageComposer({
   };
 
   const handleKeyDown = (event) => {
+    // While the mention list is open, the arrow keys, Enter, Tab and Escape belong to it.
+    if (suggestions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setMentionIndex((index) => (index + 1) % suggestions.length);
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setMentionIndex((index) => (index - 1 + suggestions.length) % suggestions.length);
+        return;
+      }
+
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault();
+        pickMention(suggestions[mentionIndex]);
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        setMention(null);
+        return;
+      }
+    }
+
     if (event.key !== 'Escape') return;
 
     if (showEmoji) setShowEmoji(false);
@@ -140,6 +217,7 @@ export default function MessageComposer({
     setSending(true);
     setError('');
     setShowEmoji(false);
+    setMention(null);
 
     try {
       if (files.length > 0) {
@@ -272,24 +350,61 @@ export default function MessageComposer({
           {showEmoji && <EmojiPicker onPick={insertEmoji} />}
         </div>
 
-        <input
-          ref={inputRef}
-          type="text"
-          value={text}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          onBlur={onStopTyping}
-          maxLength={4000}
-          placeholder={
-            editing
-              ? 'Edit your message'
-              : files.length > 0
-                ? 'Add a caption (optional)'
-                : 'Type a message'
-          }
-          aria-label="Message"
-          className="min-w-0 flex-1 rounded-lg bg-slate-700 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
-        />
+        <div className="relative min-w-0 flex-1">
+          {suggestions.length > 0 && (
+            <ul
+              role="listbox"
+              aria-label="Mention someone"
+              className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-xs overflow-hidden rounded-xl border border-slate-600 bg-slate-800 py-1 shadow-xl"
+            >
+              {suggestions.map((member, index) => (
+                <li key={member._id} role="option" aria-selected={index === mentionIndex}>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => pickMention(member)}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${
+                      index === mentionIndex ? 'bg-slate-700' : 'hover:bg-slate-700/60'
+                    }`}
+                  >
+                    <Avatar name={getDisplayName(member)} src={member.avatar} size="sm" />
+                    <span className="min-w-0">
+                      <span className="block truncate">{getDisplayName(member)}</span>
+                      <span className="block truncate text-xs text-slate-400">@{member.username}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <input
+            ref={inputRef}
+            type="text"
+            value={text}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            onKeyUp={(event) => {
+              if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+                updateMention(text, event.target.selectionStart ?? text.length);
+              }
+            }}
+            onClick={(event) => updateMention(text, event.target.selectionStart ?? text.length)}
+            onBlur={onStopTyping}
+            maxLength={4000}
+            placeholder={
+              editing
+                ? 'Edit your message'
+                : files.length > 0
+                  ? 'Add a caption (optional)'
+                  : members
+                    ? 'Type a message (use @ to mention)'
+                    : 'Type a message'
+            }
+            aria-label="Message"
+            className="w-full rounded-lg bg-slate-700 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
 
         <button
           type="submit"

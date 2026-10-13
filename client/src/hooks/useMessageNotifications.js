@@ -27,7 +27,7 @@ export const useMessageNotifications = ({ conversations, activeId, onOpen }) => 
     if (!socket) return;
 
     const handleMessage = (message) => {
-      if (message.sender._id === myId) return;
+      if (message.sender._id === myId || message.system) return;
 
       const { conversations: chats, activeId: openId, onOpen: open } = latest.current;
 
@@ -41,7 +41,10 @@ export const useMessageNotifications = ({ conversations, activeId, onOpen }) => 
       const conversation = chats.find((chat) => chat._id === message.conversation);
 
       // Muted chats and spam stay quiet.
-      if (conversation && (isMuted(conversation) || getState(conversation).spam)) return;
+      // Muted chats stay quiet, except when someone @mentions me.
+      const mentionedMe = Boolean(message.mentions?.includes(myId));
+
+      if (conversation && ((isMuted(conversation) && !mentionedMe) || getState(conversation).spam)) return;
 
       const title = conversation ? getConversationTitle(conversation, myId) : (message.sender.displayName || message.sender.username);
       const preview = getMessagePreview(message);

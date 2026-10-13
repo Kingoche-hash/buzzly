@@ -34,6 +34,7 @@ export default function PresenceProvider({ children }) {
     socket.on('connect', sync); // also runs again after every reconnect
     socket.on('conversation_created', sync); // new contacts to learn about
     socket.on('blocks_changed', sync); // someone was blocked or unblocked
+    socket.on('conversation_updated', sync); // a group gained or lost members
     socket.on('user_online', handleOnline);
     socket.on('user_offline', handleOffline);
 
@@ -43,6 +44,7 @@ export default function PresenceProvider({ children }) {
       socket.off('connect', sync);
       socket.off('conversation_created', sync);
       socket.off('blocks_changed', sync);
+      socket.off('conversation_updated', sync);
       socket.off('user_online', handleOnline);
       socket.off('user_offline', handleOffline);
       setOnlineIds(new Set());

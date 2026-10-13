@@ -3,19 +3,19 @@ import Message from '../models/Message.js';
 import User from '../models/User.js';
 import { AppError } from '../utils/AppError.js';
 import { getBlockState, getHiddenIds, isHiddenBetween } from './block.service.js';
-import { areFriends } from './friend.service.js';
 import { DEFAULT_STATE, getStatesById } from './conversationState.service.js';
+import { areFriends } from './friend.service.js';
 
 const MEMBER_FIELDS =
   'username displayName avatar isOnline lastSeen privacy.showPresence privacy.readReceipts';
 
+const LAST_MESSAGE_FIELDS =
+  'content sender createdAt attachments deletedAt deletedFor sharedPost storyReply system';
+
 const populateConversation = (query) =>
   query
     .populate('members', MEMBER_FIELDS)
-    .populate({
-      path: 'lastMessage',
-      select: 'content sender createdAt attachments deletedAt deletedFor sharedPost storyReply',
-    });
+    .populate({ path: 'lastMessage', select: LAST_MESSAGE_FIELDS });
 
 // People who switched off "show when I'm online" must not leak it through the member list.
 const hidePrivateDetails = (conversationJson) => ({
@@ -43,6 +43,12 @@ export const getConversationForMember = async (conversationId, userId) => {
   }
 
   return conversation;
+};
+
+// One conversation as the browser sees it, with its members filled in.
+export const getConversationDto = async (conversationId) => {
+  const populated = await populateConversation(Conversation.findById(conversationId));
+  return populated ? hidePrivateDetails(populated.toJSON()) : null;
 };
 
 export const createDirectConversation = async (currentUserId, otherUserId) => {
@@ -108,10 +114,17 @@ export const createGroupConversation = async (currentUserId, { name, memberIds }
     throw new AppError('One or more users do not exist', 404);
   }
 
+  // People I blocked, and people who blocked me, cannot be put in my group.
+  const hidden = new Set(await getHiddenIds(currentUserId));
+  if (ids.some((id) => hidden.has(id))) {
+    throw new AppError('One or more users do not exist', 404);
+  }
+
   const conversation = await Conversation.create({
     type: 'group',
     name,
     members: ids,
+    admins: [currentUserId],
     createdBy: currentUserId,
   });
 
@@ -148,6 +161,8 @@ export const listConversations = async (userId) => {
           readBy: { $ne: userId },
           deletedAt: null,
           deletedFor: { $ne: userId },
+          // Notes like "Alice added Bob" are not unread messages.
+          system: { $exists: false },
         },
       },
       { $group: { _id: '$conversation', count: { $sum: 1 } } },
@@ -171,7 +186,7 @@ export const listConversations = async (userId) => {
       if (hiddenForMe) {
         const visible = await Message.findOne({ conversation: conversation._id, deletedFor: { $ne: userId } })
           .sort({ _id: -1 })
-          .select('content sender createdAt attachments deletedAt sharedPost storyReply');
+          .select('content sender createdAt attachments deletedAt sharedPost storyReply system');
 
         json.lastMessage = visible ? visible.toJSON() : null;
       }

@@ -57,6 +57,15 @@ const reactionSchema = new Schema(
   { _id: false }
 );
 
+// A note in a group chat, like "Alice added Bob". The text is written when it happens.
+const systemSchema = new Schema(
+  {
+    kind: { type: String, required: true },
+    text: { type: String, required: true, maxlength: 280 },
+  },
+  { _id: false }
+);
+
 const messageSchema = new Schema(
   {
     conversation: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true },
@@ -66,6 +75,9 @@ const messageSchema = new Schema(
     storyReply: { type: storyReplySchema, default: undefined },
     sharedPost: { type: sharedPostSchema, default: undefined },
     replyTo: { type: replyToSchema, default: undefined },
+    system: { type: systemSchema, default: undefined },
+    // Group members this message @mentions.
+    mentions: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     reactions: { type: [reactionSchema], default: [] },
     editedAt: { type: Date, default: null },
     // Set when the sender deletes the message for everyone. The message stays as an empty "tombstone".

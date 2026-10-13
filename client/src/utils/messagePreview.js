@@ -3,6 +3,7 @@ import { isImage } from './attachments';
 // The short line shown under a chat's name in the left list.
 export const getMessagePreview = (message) => {
   if (!message) return 'No messages yet';
+  if (message.system) return message.system.text;
   if (message.deletedAt) return '🚫 This message was deleted';
   if (message.content) return message.content;
   if (message.sharedPost) return '📸 Shared a post';

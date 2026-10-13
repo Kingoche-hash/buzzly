@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { lazy, Suspense, useRef, useState } from 'react';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useToast } from '../hooks/useToast';
 import { getDisplayName } from '../utils/conversation';
@@ -9,6 +9,8 @@ import Modal from './Modal';
 import UserProfileDialog from './UserProfileDialog';
 import { blockUserRequest } from '../services/block.service';
 import { useRelationship } from '../hooks/useRelationship';
+
+const GroupInfoDialog = lazy(() => import('./GroupInfoDialog'));
 import WallpaperPicker from './WallpaperPicker';
 
 function MenuItem({ icon, onClick, danger = false, children }) {
@@ -138,10 +140,10 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
               icon="👥"
               onClick={() => {
                 setOpen(false);
-                setDialog('members');
+                setDialog('group');
               }}
             >
-              Members
+              Group info
             </MenuItem>
           )}
 
@@ -220,6 +222,17 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
           onConfirm={handleBlock}
           onCancel={() => setDialog(null)}
         />
+      )}
+
+      {dialog === 'group' && (
+        <Suspense fallback={null}>
+          <GroupInfoDialog
+            conversation={conversation}
+            currentUserId={currentUserId}
+            onLeave={onLeave}
+            onClose={() => setDialog(null)}
+          />
+        </Suspense>
       )}
 
       {dialog === 'delete' && (

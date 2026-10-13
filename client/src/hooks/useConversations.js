@@ -64,7 +64,7 @@ export const useConversations = (activeId = null) => {
     if (!socket) return;
 
     const handleMessage = (message) => {
-      const fromMe = message.sender._id === myId;
+      const fromMe = message.sender._id === myId || Boolean(message.system);
 
       const looking =
         activeIdRef.current === message.conversation &&
@@ -146,6 +146,20 @@ export const useConversations = (activeId = null) => {
     socket.on('receive_message', handleMessage);
     socket.on('message_updated', handleUpdated);
     socket.on('message_removed', handleBlocks);
+
+    // A group's name, photo, members or admins changed, or I was removed from it.
+    const handleGroupUpdated = ({ conversationId, name, avatar, members, admins, createdBy }) => {
+      setConversations((prev) =>
+        prev.map((c) => (c._id === conversationId ? { ...c, name, avatar, members, admins, createdBy } : c))
+      );
+    };
+
+    const handleGroupRemoved = ({ conversationId }) => {
+      setConversations((prev) => prev.filter((c) => c._id !== conversationId));
+    };
+
+    socket.on('conversation_updated', handleGroupUpdated);
+    socket.on('conversation_removed', handleGroupRemoved);
     socket.on('conversation_created', handleCreated);
     socket.on('messages_read', handleRead);
     socket.on('conversation_state', handleState);
@@ -156,6 +170,8 @@ export const useConversations = (activeId = null) => {
       socket.off('receive_message', handleMessage);
       socket.off('message_updated', handleUpdated);
       socket.off('message_removed', handleBlocks);
+      socket.off('conversation_updated', handleGroupUpdated);
+      socket.off('conversation_removed', handleGroupRemoved);
       socket.off('conversation_created', handleCreated);
       socket.off('messages_read', handleRead);
       socket.off('conversation_state', handleState);

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
 import MessageReport from '../models/MessageReport.js';
+import { resolveMentions } from './mention.service.js';
 import { AppError } from '../utils/AppError.js';
 import { getConversationForMember } from './conversation.service.js';
 import { assertCanMessageInConversation } from './friend.service.js';
@@ -65,6 +66,7 @@ export const createMessage = async ({
   await assertCanMessageInConversation(conversation, senderId);
 
   const reply = replyTo ? await replySnapshot(conversationId, senderId, replyTo) : undefined;
+  const mentions = await resolveMentions(conversation, content);
 
   const message = await Message.create({
     conversation: conversationId,
@@ -74,6 +76,7 @@ export const createMessage = async ({
     storyReply,
     sharedPost,
     replyTo: reply,
+    mentions,
   });
 
   await Conversation.updateOne(

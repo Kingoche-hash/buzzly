@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useMessages } from '../hooks/useMessages';
 import { usePresence } from '../hooks/usePresence';
@@ -22,6 +22,8 @@ import MessageBubble from './MessageBubble';
 import MessageComposer from './MessageComposer';
 import { MessageListSkeleton } from './Skeleton';
 import UserProfileDialog from './UserProfileDialog';
+
+const GroupInfoDialog = lazy(() => import('./GroupInfoDialog'));
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 
@@ -72,6 +74,7 @@ export default function MessagePane({
   const lastId = messages.at(-1)?._id;
 
   const [showProfile, setShowProfile] = useState(false);
+  const [showGroup, setShowGroup] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [editing, setEditing] = useState(null);
   const [sheet, setSheet] = useState(null); // { id, canEdit } of the message whose menu is open
@@ -185,12 +188,12 @@ export default function MessagePane({
 
         <button
           type="button"
-          disabled={!other}
-          onClick={() => setShowProfile(true)}
-          aria-label={other ? `Open ${title}'s profile` : title}
+          
+          onClick={() => (other ? setShowProfile(true) : setShowGroup(true))}
+          aria-label={other ? `Open ${title}'s profile` : `Open ${title} info`}
           className="flex min-w-0 items-center gap-3 rounded-lg text-left disabled:cursor-default"
         >
-          <Avatar name={title} src={other?.avatar} online={headerOnline} />
+          <Avatar name={title} src={other ? other.avatar : conversation.avatar} online={headerOnline} />
           <span className="min-w-0">
             <span className="block truncate font-semibold">
               {title}
@@ -276,6 +279,7 @@ export default function MessagePane({
                 status={mine ? getMessageStatus(message, conversation, user._id) : 'sent'}
                 glowing={highlightId === message._id}
                 actions={actions}
+                members={conversation.type === 'group' ? conversation.members : null}
               />
             </Fragment>
           );
@@ -304,6 +308,7 @@ export default function MessagePane({
 
       <div className="bg-slate-900 pb-[env(safe-area-inset-bottom)]">
         <MessageComposer
+          members={conversation.type === 'group' ? conversation.members : null}
           onSend={handleSend}
           onSendFiles={handleSendFiles}
           onTyping={notifyTyping}
@@ -352,6 +357,17 @@ export default function MessagePane({
             }
           }}
         />
+      )}
+
+      {showGroup && conversation.type === 'group' && (
+        <Suspense fallback={null}>
+          <GroupInfoDialog
+            conversation={conversation}
+            currentUserId={user._id}
+            onLeave={onLeave}
+            onClose={() => setShowGroup(false)}
+          />
+        </Suspense>
       )}
 
       {showProfile && other && (

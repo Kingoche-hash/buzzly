@@ -245,7 +245,7 @@ export default function Sidebar({
                   >
                     <Avatar
                       name={title}
-                      src={other?.avatar}
+                      src={other ? other.avatar : conversation.avatar}
                       online={other ? isOnline(other._id) : null}
                     />
 

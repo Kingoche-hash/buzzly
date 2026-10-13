@@ -1,7 +1,8 @@
-import { memo } from 'react';
+import { Fragment, memo, useMemo } from 'react';
 import { getDisplayName } from '../utils/conversation';
 import { formatTime } from '../utils/formatTime';
 import { squareThumb } from '../utils/imageUrl';
+import { splitMentions } from '../utils/mentions';
 import { summarizeReactions } from '../utils/reactions';
 import AttachmentList from './AttachmentList';
 import MessageStatus from './MessageStatus';
@@ -38,10 +39,52 @@ function ReplyQuote({ reply }) {
   );
 }
 
+// The text of a message, with @mentions of group members highlighted.
+function MessageText({ text, usernames, myUsername }) {
+  const pieces = usernames ? splitMentions(text, usernames) : [{ text, mention: null }];
+
+  return (
+    <p className="whitespace-pre-wrap break-words">
+      {pieces.map((piece, index) =>
+        piece.mention ? (
+          <span
+            key={index}
+            className={`font-semibold underline decoration-dotted underline-offset-2 ${
+              piece.mention === myUsername ? 'rounded bg-amber-300/30 px-0.5' : ''
+            }`}
+          >
+            {piece.text}
+          </span>
+        ) : (
+          <Fragment key={index}>{piece.text}</Fragment>
+        )
+      )}
+    </p>
+  );
+}
+
 // One chat bubble. memo() means it redraws only when ITS OWN message changes,
 // not every time someone starts typing or goes online.
 // `actions` is one stable object: { openMenu(message), react(message, emoji or null) }.
-function MessageBubble({ message, mine, myId, showSender, status, glowing, actions }) {
+// `members` is the group's member list (for @mentions), or null in a direct chat.
+function MessageBubble({ message, mine, myId, showSender, status, glowing, actions, members = null }) {
+  const usernames = useMemo(
+    () => (members ? new Set(members.map((member) => member.username.toLowerCase())) : null),
+    [members]
+  );
+  const myUsername = members?.find((member) => member._id === myId)?.username.toLowerCase();
+
+  // A note like "Alice added Bob": a small centered line instead of a bubble.
+  if (message.system) {
+    return (
+      <div id={`message-${message._id}`} className="flex justify-center py-1">
+        <span className="max-w-[90%] rounded-full bg-slate-800/90 px-3 py-1 text-center text-xs text-slate-300">
+          {message.system.text}
+        </span>
+      </div>
+    );
+  }
+
   const deleted = Boolean(message.deletedAt);
   const reactions = summarizeReactions(message.reactions, myId);
 
@@ -69,7 +112,7 @@ function MessageBubble({ message, mine, myId, showSender, status, glowing, actio
                 <AttachmentList attachments={message.attachments} />
 
                 {message.content && (
-                  <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                  <MessageText text={message.content} usernames={usernames} myUsername={myUsername} />
                 )}
               </>
             )}

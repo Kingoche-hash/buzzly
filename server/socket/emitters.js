@@ -57,3 +57,40 @@ export const emitMessageRemoved = (userId, conversationId, messageId) => {
     messageId: messageId.toString(),
   });
 };
+
+// A group changed (name, photo, members, admins). Tell its members, and deal with people who joined or left.
+export const announceGroupUpdate = ({ conversationId, conversation = null, added = [], removed = [] }) => {
+  const io = getIO();
+  if (!io) return;
+
+  const id = conversationId.toString();
+
+  if (conversation) {
+    const plain = toPlain(conversation);
+
+    const update = {
+      conversationId: id,
+      name: plain.name,
+      avatar: plain.avatar || '',
+      members: plain.members,
+      admins: plain.admins || [],
+      createdBy: plain.createdBy,
+    };
+
+    // New members: put their open windows in the room, and show them the group.
+    for (const memberId of added) {
+      io.in(userRoom(memberId)).socketsJoin(conversationRoom(id));
+      io.to(userRoom(memberId)).emit('conversation_created', plain);
+    }
+
+    for (const member of plain.members) {
+      io.to(userRoom(member._id)).emit('conversation_updated', update);
+    }
+  }
+
+  // People who left or were removed stop hearing the group straight away.
+  for (const goneId of removed) {
+    io.in(userRoom(goneId)).socketsLeave(conversationRoom(id));
+    io.to(userRoom(goneId)).emit('conversation_removed', { conversationId: id });
+  }
+};
