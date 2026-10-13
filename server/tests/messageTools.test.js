@@ -125,10 +125,10 @@ describe('message tools: reply, edit, delete, react, report', () => {
   it('refuses editing after 15 minutes', async () => {
     const sent = await send(alice, 'old');
 
-    await Message.updateOne(
-      { _id: sent._id },
-      { createdAt: new Date(Date.now() - 20 * 60 * 1000) },
-      { timestamps: false }
+    // Written straight to the database: Mongoose protects createdAt from being edited.
+    await Message.collection.updateOne(
+      { _id: new Message.base.Types.ObjectId(sent._id) },
+      { $set: { createdAt: new Date(Date.now() - 20 * 60 * 1000) } }
     );
 
     const res = await patch(alice, url(sent._id), { content: 'too late' });
