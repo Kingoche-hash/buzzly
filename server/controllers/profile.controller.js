@@ -11,6 +11,7 @@ import { getIO } from '../socket/io.js';
 import { broadcastProfileUpdate, broadcastVisibilityChange } from '../socket/presence.js';
 import { AppError } from '../utils/AppError.js';
 import { removeUserBlocks } from '../services/block.service.js';
+import { removeUserFriendships } from '../services/friend.service.js';
 import { removeUserContent } from '../services/post.service.js';
 import { signToken } from '../utils/token.js';
 
@@ -70,6 +71,9 @@ export const deleteMyAccount = async (req, res) => {
   );
   await removeUserBlocks(req.user._id).catch((error) =>
     console.error('Could not remove the blocks of a deleted account:', error.message)
+  );
+  await removeUserFriendships(req.user._id).catch((error) =>
+    console.error('Could not remove the friendships of a deleted account:', error.message)
   );
 
   // Hang up every open connection of this person.

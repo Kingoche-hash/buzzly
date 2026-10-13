@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { usePresence } from '../hooks/usePresence';
 import { useSocket } from '../hooks/useSocket';
+import { useFriends } from '../hooks/useFriends';
 import { useToast } from '../hooks/useToast';
 import { useTyping } from '../hooks/useTyping';
 import { getConversationTitle, getDisplayName, getOtherMember } from '../utils/conversation';
@@ -20,6 +21,7 @@ import StoriesRow from './StoriesRow';
 const NewChatDialog = lazy(() => import('./NewChatDialog'));
 const SearchPanel = lazy(() => import('./SearchPanel'));
 const ThemePicker = lazy(() => import('./ThemePicker'));
+const FriendsDialog = lazy(() => import('./FriendsDialog'));
 
 const tabClass = (selected) =>
   `flex-1 py-2 text-sm font-medium ${
@@ -54,11 +56,13 @@ export default function Sidebar({
   const { getTypingNames } = useTyping();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const { incomingCount } = useFriends({ notify: true });
 
   const [tab, setTab] = useState('chats');
   const [filter, setFilter] = useState('all');
   const [showNewChat, setShowNewChat] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
 
   // Desktop notifications need the person's permission first.
   const [permission, setPermission] = useState(() =>
@@ -128,6 +132,20 @@ export default function Sidebar({
           >
             📸
           </Link>
+          <button
+            type="button"
+            onClick={() => setShowFriends(true)}
+            aria-label={incomingCount > 0 ? 'Friends, ' + incomingCount + ' new requests' : 'Friends'}
+            title="Friends"
+            className="relative rounded-lg bg-slate-700 px-3 py-1 text-sm hover:bg-slate-600"
+          >
+            👥
+            {incomingCount > 0 && (
+              <span className="absolute -right-1 -top-1 rounded-full bg-emerald-500 px-1.5 text-[10px] font-semibold text-white">
+                {incomingCount}
+              </span>
+            )}
+          </button>
           <button
             onClick={logout}
             className="rounded-lg bg-slate-700 px-3 py-1 text-sm hover:bg-slate-600"
@@ -304,6 +322,7 @@ export default function Sidebar({
         )}
 
         {showTheme && <ThemePicker onClose={() => setShowTheme(false)} />}
+        {showFriends && <FriendsDialog onClose={() => setShowFriends(false)} />}
       </Suspense>
     </aside>
   );

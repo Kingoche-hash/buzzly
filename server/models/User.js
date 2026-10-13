@@ -25,6 +25,8 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
     passwordChangedAt: { type: Date, default: null },
+    // Who may start a chat with me: everyone, or only my friends.
+    whoCanMessage: { type: String, enum: ['everyone', 'friends'], default: 'everyone' },
     avatar: { type: String, default: '' },
     avatarPublicId: { type: String, default: '', select: false },
     bio: { type: String, trim: true, maxlength: 160, default: '' },

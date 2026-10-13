@@ -3,6 +3,7 @@ import Message from '../models/Message.js';
 import User from '../models/User.js';
 import { AppError } from '../utils/AppError.js';
 import { getBlockState, getHiddenIds, isHiddenBetween } from './block.service.js';
+import { areFriends } from './friend.service.js';
 import { DEFAULT_STATE, getStatesById } from './conversationState.service.js';
 
 const MEMBER_FIELDS =
@@ -46,7 +47,7 @@ export const createDirectConversation = async (currentUserId, otherUserId) => {
     throw new AppError('You cannot start a conversation with yourself', 400);
   }
 
-  const other = await User.findOne({ _id: otherUserId, deletedAt: null }).select('_id');
+  const other = await User.findOne({ _id: otherUserId, deletedAt: null }).select('_id whoCanMessage');
   if (!other) {
     throw new AppError('User not found', 404);
   }
@@ -68,6 +69,11 @@ export const createDirectConversation = async (currentUserId, otherUserId) => {
   let created = false;
 
   if (!conversation) {
+    // Someone who only accepts messages from friends cannot be written to first by a stranger.
+    if (other.whoCanMessage === 'friends' && !(await areFriends(currentUserId, otherUserId))) {
+      throw new AppError('This person only accepts messages from friends.', 403);
+    }
+
     try {
       conversation = await Conversation.create({
         type: 'direct',

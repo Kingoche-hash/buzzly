@@ -1,4 +1,5 @@
 import { blockUser, listBlocked, reportUser, unblockUser } from '../services/block.service.js';
+import { removeFriendshipBetween } from '../services/friend.service.js';
 import { userRoom } from '../socket/emitters.js';
 import { getIO } from '../socket/io.js';
 
@@ -17,6 +18,7 @@ export const listBlockedHandler = async (req, res) => {
 
 export const blockHandler = async (req, res) => {
   await blockUser(req.user._id, req.params.userId);
+  await removeFriendshipBetween(req.user._id, req.params.userId); // blocking ends a friendship or request
   announceBlockChange(req.user._id, req.params.userId);
   res.status(200).json({ ok: true });
 };

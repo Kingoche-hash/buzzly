@@ -8,6 +8,7 @@ import ConfirmDialog from './confirmDialog';
 import Modal from './Modal';
 import UserProfileDialog from './UserProfileDialog';
 import { blockUserRequest } from '../services/block.service';
+import { useRelationship } from '../hooks/useRelationship';
 import WallpaperPicker from './WallpaperPicker';
 
 function MenuItem({ icon, onClick, danger = false, children }) {
@@ -45,6 +46,9 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
   const [dialog, setDialog] = useState(null); // 'delete' | 'wallpaper' | 'members' | null
   const [profileId, setProfileId] = useState(null);
   const menuRef = useRef(null);
+
+  // My friendship with the other person (only asked when the menu is open).
+  const relation = useRelationship(otherPerson?._id, open);
 
   useClickOutside(menuRef, () => setOpen(false), open);
 
@@ -145,6 +149,28 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
             {state.spam ? 'Not spam' : 'Report as spam'}
           </MenuItem>
 
+          {otherPerson && relation.status && (
+            <MenuItem
+              icon={relation.status === 'friends' ? '💔' : relation.status === 'outgoing' ? '⏳' : '➕'}
+              onClick={() => {
+                setOpen(false);
+
+                if (relation.status === 'friends') setDialog('unfriend');
+                else if (relation.status === 'outgoing') relation.cancel();
+                else if (relation.status === 'incoming') relation.accept();
+                else relation.send();
+              }}
+            >
+              {relation.status === 'friends'
+                ? 'Unfriend'
+                : relation.status === 'outgoing'
+                  ? 'Cancel friend request'
+                  : relation.status === 'incoming'
+                    ? 'Accept friend request'
+                    : 'Add friend'}
+            </MenuItem>
+          )}
+
           {otherPerson && (
             <MenuItem
               icon="⛔"
@@ -169,6 +195,20 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
             Delete chat
           </MenuItem>
         </ul>
+      )}
+
+      {dialog === 'unfriend' && otherPerson && (
+        <ConfirmDialog
+          title={'Unfriend ' + getDisplayName(otherPerson) + '?'}
+          message="You will no longer be friends. You can send a new request later."
+          confirmLabel="Unfriend"
+          danger
+          onConfirm={async () => {
+            setDialog(null);
+            await relation.unfriend();
+          }}
+          onCancel={() => setDialog(null)}
+        />
       )}
 
       {dialog === 'block' && otherPerson && (

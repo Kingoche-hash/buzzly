@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Avatar from '../components/Avatar';
 import ConfirmDialog from '../components/ConfirmDialog';
+import FriendButton from '../components/FriendButton';
 import PostComposer from '../components/PostComposer';
 import { useAuth } from '../hooks/useAuth';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -21,6 +22,7 @@ import { squareThumb } from '../utils/imageUrl';
 const ProfileDialog = lazy(() => import('../components/ProfileDialog'));
 const ThemePicker = lazy(() => import('../components/ThemePicker'));
 const BlockedUsersDialog = lazy(() => import('../components/BlockedUsersDialog'));
+const FriendsDialog = lazy(() => import('../components/FriendsDialog'));
 const ReportUserDialog = lazy(() => import('../components/ReportUserDialog'));
 
 const buttonClass = 'rounded-lg bg-slate-700 px-4 py-1.5 text-sm font-semibold hover:bg-slate-600';
@@ -441,6 +443,9 @@ function ProfileView({ userId }) {
                   <button type="button" onClick={() => setShowTheme(true)} className={buttonClass}>
                     🎨 Appearance
                   </button>
+                  <button type="button" onClick={() => setDialog('friends')} className={buttonClass}>
+                    👥 Friends
+                  </button>
                   <button type="button" onClick={() => setDialog('blocked')} className={buttonClass}>
                     🚫 Blocked users
                   </button>
@@ -453,14 +458,17 @@ function ProfileView({ userId }) {
                   </button>
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleMessage}
-                  disabled={messaging}
-                  className="rounded-lg bg-emerald-600 px-6 py-1.5 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60"
-                >
-                  {messaging ? 'Opening...' : '💬 Message'}
-                </button>
+                <>
+                  <FriendButton userId={userId} name={name} />
+                  <button
+                    type="button"
+                    onClick={handleMessage}
+                    disabled={messaging}
+                    className="rounded-lg bg-emerald-600 px-6 py-1.5 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60"
+                  >
+                    {messaging ? 'Opening...' : '💬 Message'}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -497,6 +505,7 @@ function ProfileView({ userId }) {
         {editing && <ProfileDialog onClose={() => setEditing(false)} />}
         {showTheme && <ThemePicker onClose={() => setShowTheme(false)} />}
         {dialog === 'blocked' && <BlockedUsersDialog onClose={() => setDialog(null)} />}
+        {dialog === 'friends' && <FriendsDialog onClose={() => setDialog(null)} />}
         {dialog === 'report' && (
           <ReportUserDialog
             person={person}

@@ -3,6 +3,7 @@ import Message from '../models/Message.js';
 import Conversation from '../models/Conversation.js';
 import { AppError } from '../utils/AppError.js';
 import { getConversationForMember } from './conversation.service.js';
+import { assertCanMessageInConversation } from './friend.service.js';
 
 const SENDER_FIELDS = 'username displayName avatar';
 
@@ -19,7 +20,8 @@ export const createMessage = async ({
     throw new AppError('Message cannot be empty', 400);
   }
 
-  await getConversationForMember(conversationId, senderId);
+  const conversation = await getConversationForMember(conversationId, senderId);
+  await assertCanMessageInConversation(conversation, senderId);
 
   const message = await Message.create({
     conversation: conversationId,
