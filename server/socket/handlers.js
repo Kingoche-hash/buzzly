@@ -73,9 +73,9 @@ export const registerHandlers = (io, socket) => {
       }
 
       const { conversationId } = parse(conversationIdParams, payload);
-      const { content } = parse(sendMessageSchema, payload);
+      const { content, replyTo } = parse(sendMessageSchema, payload);
 
-      const message = await createMessage({ conversationId, senderId: userId, content });
+      const message = await createMessage({ conversationId, senderId: userId, content, replyTo });
       broadcastMessage(message);
 
       return { message: JSON.parse(JSON.stringify(message)) };

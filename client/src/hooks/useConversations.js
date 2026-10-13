@@ -134,7 +134,18 @@ export const useConversations = (activeId = null) => {
         .catch(() => {});
     };
 
+    // A message changed (edited, deleted for everyone...): keep the preview under the chat's name right.
+    const handleUpdated = (message) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.lastMessage?._id === message._id ? { ...c, lastMessage: { ...c.lastMessage, ...message } } : c
+        )
+      );
+    };
+
     socket.on('receive_message', handleMessage);
+    socket.on('message_updated', handleUpdated);
+    socket.on('message_removed', handleBlocks);
     socket.on('conversation_created', handleCreated);
     socket.on('messages_read', handleRead);
     socket.on('conversation_state', handleState);
@@ -143,6 +154,8 @@ export const useConversations = (activeId = null) => {
 
     return () => {
       socket.off('receive_message', handleMessage);
+      socket.off('message_updated', handleUpdated);
+      socket.off('message_removed', handleBlocks);
       socket.off('conversation_created', handleCreated);
       socket.off('messages_read', handleRead);
       socket.off('conversation_state', handleState);

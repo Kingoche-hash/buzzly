@@ -18,6 +18,7 @@ export const sendMessageWithFiles = async (req, res) => {
       senderId: req.user._id,
       content: req.body.content ?? '',
       attachments,
+      replyTo: req.valid?.query?.replyTo,
     });
 
     broadcastMessage(message);

@@ -43,13 +43,14 @@ export const updateConversationStateRequest = async (conversationId, patch) => {
 };
 
 // Sends files (and an optional caption) in one request. Reports upload progress as 0 to 100.
-export const sendFilesRequest = async (conversationId, files, content, onProgress) => {
+export const sendFilesRequest = async (conversationId, files, content, onProgress, replyTo) => {
   const form = new FormData();
   files.forEach((file) => form.append('files', file));
   if (content) form.append('content', content);
 
   const res = await api.post(`/conversations/${conversationId}/attachments`, form, {
     timeout: 120000,
+    params: replyTo ? { replyTo } : undefined,
     onUploadProgress: (event) => {
       if (event.total) onProgress?.(Math.round((event.loaded * 100) / event.total));
     },
@@ -64,4 +65,32 @@ export const setWallpaperPhotoRequest = async (conversationId, file) => {
 
   const res = await api.post(`/conversations/${conversationId}/wallpaper`, form, { timeout: 60000 });
   return res.data.state;
+};
+
+// Message tools: edit, delete (scope is 'me' or 'everyone'), react, report.
+export const editMessageRequest = async (conversationId, messageId, content) => {
+  const res = await api.patch(`/conversations/${conversationId}/messages/${messageId}`, { content });
+  return res.data.message;
+};
+
+// Answers with the updated message for 'everyone', and with nothing for 'me'.
+export const deleteMessageRequest = async (conversationId, messageId, scope) => {
+  const res = await api.delete(`/conversations/${conversationId}/messages/${messageId}`, {
+    params: { scope },
+  });
+  return res.data.message || null;
+};
+
+export const setReactionRequest = async (conversationId, messageId, emoji) => {
+  const res = await api.put(`/conversations/${conversationId}/messages/${messageId}/reaction`, { emoji });
+  return res.data.message;
+};
+
+export const removeReactionRequest = async (conversationId, messageId) => {
+  const res = await api.delete(`/conversations/${conversationId}/messages/${messageId}/reaction`);
+  return res.data.message;
+};
+
+export const reportMessageRequest = async (conversationId, messageId, reason) => {
+  await api.post(`/conversations/${conversationId}/messages/${messageId}/report`, { reason });
 };

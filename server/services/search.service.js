@@ -28,9 +28,12 @@ export const searchMessages = async ({ userId, query, conversationId, senderId, 
     conversationFilter = { $in: mine.map((conversation) => conversation._id) };
   }
 
+  // Deleted messages, and messages I deleted for myself, are never found.
   const filter = {
     $text: { $search: query },
     conversation: conversationFilter,
+    deletedAt: null,
+    deletedFor: { $ne: userId },
   };
 
   if (senderId) filter.sender = senderId;

@@ -62,3 +62,12 @@ export const commentLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'You are doing that too fast, please slow down' },
 });
+
+// Edits, deletes, reactions and reports of messages.
+export const actionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: production ? 60 : 400,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'You are doing that too fast, please slow down' },
+});

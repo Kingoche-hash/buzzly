@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchMessages, sendFilesRequest } from '../services/chat.service';
+import {
+  deleteMessageRequest,
+  editMessageRequest,
+  fetchMessages,
+  removeReactionRequest,
+  sendFilesRequest,
+  setReactionRequest,
+} from '../services/chat.service';
 import { getErrorMessage } from '../utils/getErrorMessage';
 import { useSocket } from './useSocket';
 
@@ -107,6 +114,33 @@ export const useMessages = (conversationId, aroundId = null) => {
     };
   }, [socket, conversationId, addMessage]);
 
+  // A message in this chat changed (edited, deleted for everyone, reacted to) or was removed for me.
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleUpdated = (message) => {
+      if (message.conversation !== conversationId) return;
+
+      setMessages((prev) =>
+        prev.some((item) => item._id === message._id) ? mergeMessages(prev, [message]) : prev
+      );
+    };
+
+    const handleRemoved = ({ conversationId: id, messageId }) => {
+      if (id !== conversationId) return;
+
+      setMessages((prev) => prev.filter((item) => item._id !== messageId));
+    };
+
+    socket.on('message_updated', handleUpdated);
+    socket.on('message_removed', handleRemoved);
+
+    return () => {
+      socket.off('message_updated', handleUpdated);
+      socket.off('message_removed', handleRemoved);
+    };
+  }, [socket, conversationId]);
+
   // Listen for receipts: "this person got / read everything up to this message".
   useEffect(() => {
     if (!socket) return;
@@ -193,33 +227,36 @@ export const useMessages = (conversationId, aroundId = null) => {
   }, [conversationId]);
 
   // Sends text through the live line and waits for the server's "got it".
+  // replyTo: the id of the message this one answers (optional).
   const send = useCallback(
-    (content) =>
+    (content, replyTo) =>
       new Promise((resolve, reject) => {
         if (!socket || !socket.connected) {
           reject(new Error('Not connected to the server yet'));
           return;
         }
 
-        socket.timeout(8000).emit('send_message', { conversationId, content }, (err, response) => {
-          if (err) return reject(new Error('The server did not answer. Please try again.'));
-          if (!response.ok) return reject(new Error(response.error));
+        socket
+          .timeout(8000)
+          .emit('send_message', { conversationId, content, replyTo }, (err, response) => {
+            if (err) return reject(new Error('The server did not answer. Please try again.'));
+            if (!response.ok) return reject(new Error(response.error));
 
-          // If we were reading the past, go to the latest so the new message is visible.
-          if (hasNewerRef.current) jumpToLatest();
-          else addMessage(response.message);
+            // If we were reading the past, go to the latest so the new message is visible.
+            if (hasNewerRef.current) jumpToLatest();
+            else addMessage(response.message);
 
-          resolve();
-        });
+            resolve();
+          });
       }),
     [socket, conversationId, addMessage, jumpToLatest]
   );
 
   // Sends files (with an optional caption) to the server, which stores them in Cloudinary.
   const sendFiles = useCallback(
-    async (files, content, onProgress) => {
+    async (files, content, onProgress, replyTo) => {
       try {
-        const message = await sendFilesRequest(conversationId, files, content, onProgress);
+        const message = await sendFilesRequest(conversationId, files, content, onProgress, replyTo);
 
         if (hasNewerRef.current) await jumpToLatest();
         else addMessage(message);
@@ -228,6 +265,49 @@ export const useMessages = (conversationId, aroundId = null) => {
       }
     },
     [conversationId, addMessage, jumpToLatest]
+  );
+
+  // Changes the text of my own message.
+  const editMessage = useCallback(
+    async (messageId, content) => {
+      try {
+        addMessage(await editMessageRequest(conversationId, messageId, content));
+      } catch (err) {
+        throw new Error(getErrorMessage(err));
+      }
+    },
+    [conversationId, addMessage]
+  );
+
+  // scope: 'me' removes it from my chat, 'everyone' turns it into "This message was deleted".
+  const deleteMessage = useCallback(
+    async (messageId, scope) => {
+      try {
+        const updated = await deleteMessageRequest(conversationId, messageId, scope);
+
+        if (scope === 'me') setMessages((prev) => prev.filter((item) => item._id !== messageId));
+        else if (updated) addMessage(updated);
+      } catch (err) {
+        throw new Error(getErrorMessage(err));
+      }
+    },
+    [conversationId, addMessage]
+  );
+
+  // emoji: one of the reactions, or null to take my reaction away.
+  const reactToMessage = useCallback(
+    async (messageId, emoji) => {
+      try {
+        addMessage(
+          emoji
+            ? await setReactionRequest(conversationId, messageId, emoji)
+            : await removeReactionRequest(conversationId, messageId)
+        );
+      } catch (err) {
+        throw new Error(getErrorMessage(err));
+      }
+    },
+    [conversationId, addMessage]
   );
 
   return {
@@ -243,5 +323,8 @@ export const useMessages = (conversationId, aroundId = null) => {
     jumpToLatest,
     send,
     sendFiles,
+    editMessage,
+    deleteMessage,
+    reactToMessage,
   };
 };

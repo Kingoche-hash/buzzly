@@ -24,6 +24,8 @@ export const sendMessageSchema = z.object({
     .trim()
     .min(1, 'Message cannot be empty')
     .max(4000, 'Message is too long'),
+  // The message this one answers (optional).
+  replyTo: objectId.optional(),
 });
 
 export const messageQuerySchema = z.object({

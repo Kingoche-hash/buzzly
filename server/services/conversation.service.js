@@ -12,7 +12,10 @@ const MEMBER_FIELDS =
 const populateConversation = (query) =>
   query
     .populate('members', MEMBER_FIELDS)
-    .populate({ path: 'lastMessage', select: 'content sender createdAt attachments' });
+    .populate({
+      path: 'lastMessage',
+      select: 'content sender createdAt attachments deletedAt deletedFor sharedPost storyReply',
+    });
 
 // People who switched off "show when I'm online" must not leak it through the member list.
 const hidePrivateDetails = (conversationJson) => ({
@@ -143,6 +146,8 @@ export const listConversations = async (userId) => {
           conversation: { $in: ids },
           sender: { $ne: userId },
           readBy: { $ne: userId },
+          deletedAt: null,
+          deletedFor: { $ne: userId },
         },
       },
       { $group: { _id: '$conversation', count: { $sum: 1 } } },
@@ -152,15 +157,34 @@ export const listConversations = async (userId) => {
 
   const unreadById = new Map(counts.map((item) => [item._id.toString(), item.count]));
 
-  return conversations.map((conversation) => {
-    const id = conversation._id.toString();
+  return Promise.all(
+    conversations.map(async (conversation) => {
+      const id = conversation._id.toString();
+      const json = hidePrivateDetails(conversation.toJSON());
 
-    return {
-      ...hidePrivateDetails(conversation.toJSON()),
-      unreadCount: unreadById.get(id) ?? 0,
-      state: states.get(id) ?? { ...DEFAULT_STATE },
-    };
-  });
+      // If I deleted the newest message for myself, show the newest one I can still see.
+      const last = conversation.lastMessage;
+      const hiddenForMe = Boolean(
+        last?.deletedFor?.some((memberId) => memberId.toString() === userId.toString())
+      );
+
+      if (hiddenForMe) {
+        const visible = await Message.findOne({ conversation: conversation._id, deletedFor: { $ne: userId } })
+          .sort({ _id: -1 })
+          .select('content sender createdAt attachments deletedAt sharedPost storyReply');
+
+        json.lastMessage = visible ? visible.toJSON() : null;
+      }
+
+      if (json.lastMessage) delete json.lastMessage.deletedFor;
+
+      return {
+        ...json,
+        unreadCount: unreadById.get(id) ?? 0,
+        state: states.get(id) ?? { ...DEFAULT_STATE },
+      };
+    })
+  );
 };
 
 export const getConversation = async (conversationId, userId) => {

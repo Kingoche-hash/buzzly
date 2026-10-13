@@ -38,3 +38,22 @@ export const emitConversationState = (userId, conversationId, state) => {
     state: toPlain(state),
   });
 };
+// A message changed (edited, deleted for everyone, reacted to): tell everyone in the chat.
+export const broadcastMessageUpdate = (message) => {
+  const io = getIO();
+  if (!io) return;
+
+  const plain = toPlain(message);
+  io.to(conversationRoom(plain.conversation)).emit('message_updated', plain);
+};
+
+// A message was removed for ONE person only: tell just their open windows.
+export const emitMessageRemoved = (userId, conversationId, messageId) => {
+  const io = getIO();
+  if (!io) return;
+
+  io.to(userRoom(userId.toString())).emit('message_removed', {
+    conversationId: conversationId.toString(),
+    messageId: messageId.toString(),
+  });
+};

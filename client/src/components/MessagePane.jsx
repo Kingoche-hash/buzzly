@@ -1,23 +1,36 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useMessages } from '../hooks/useMessages';
 import { usePresence } from '../hooks/usePresence';
 import { useReadReceipts } from '../hooks/useReadReceipts';
+import { useToast } from '../hooks/useToast';
 import { useTyping } from '../hooks/useTyping';
 import { useTypingEmitter } from '../hooks/useTypingEmitter';
+import { reportMessageRequest } from '../services/chat.service';
 import { getConversationTitle, getOtherMember } from '../utils/conversation';
 import { getState, isMuted } from '../utils/conversationFilters';
 import { dayKey, formatDayLabel } from '../utils/formatDay';
 import { formatLastSeen } from '../utils/formatLastSeen';
 import { formatTyping } from '../utils/formatTyping';
+import { getErrorMessage } from '../utils/getErrorMessage';
 import { getMessageStatus } from '../utils/messageStatus';
 import { getWallpaperStyle } from '../utils/wallpapers';
 import Avatar from './Avatar';
 import ChatMenu from './ChatMenu';
+import MessageActionSheet from './MessageActionSheet';
 import MessageBubble from './MessageBubble';
 import MessageComposer from './MessageComposer';
 import { MessageListSkeleton } from './Skeleton';
 import UserProfileDialog from './UserProfileDialog';
+
+const EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+// Called when someone opens a message's menu (never while drawing the screen).
+const canEditMessage = (message, myId) =>
+  message.sender._id === myId &&
+  !message.deletedAt &&
+  !message.sharedPost &&
+  Date.now() - new Date(message.createdAt).getTime() < EDIT_WINDOW_MS;
 
 export default function MessagePane({
   conversation,
@@ -29,6 +42,7 @@ export default function MessagePane({
   aroundId = null,
 }) {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const { isOnline, getLastSeen } = usePresence();
   const { getTypingNames } = useTyping();
   const {
@@ -44,6 +58,9 @@ export default function MessagePane({
     jumpToLatest,
     send,
     sendFiles,
+    editMessage,
+    deleteMessage,
+    reactToMessage,
   } = useMessages(conversation._id, aroundId);
   const { notifyTyping, stopTyping } = useTypingEmitter(conversation._id);
 
@@ -55,6 +72,9 @@ export default function MessagePane({
   const lastId = messages.at(-1)?._id;
 
   const [showProfile, setShowProfile] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [sheet, setSheet] = useState(null); // { id, canEdit } of the message whose menu is open
 
   // The message we jumped to glows for a few seconds.
   const [highlightId, setHighlightId] = useState(aroundId);
@@ -82,6 +102,47 @@ export default function MessagePane({
 
     if (!hasNewer) bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [loading, lastId, aroundId, hasNewer]);
+
+  // The bubbles are memoized, so they all get ONE stable set of actions that always call the latest code.
+  const latest = useRef({});
+
+  useEffect(() => {
+    latest.current = {
+      openMenu: (message) => setSheet({ id: message._id, canEdit: canEditMessage(message, user._id) }),
+      react: async (message, emoji) => {
+        try {
+          await reactToMessage(message._id, emoji);
+        } catch (err) {
+          showToast({ title: 'Could not react', text: err.message });
+        }
+      },
+    };
+  });
+
+  const actions = useMemo(
+    () => ({
+      openMenu: (message) => latest.current.openMenu(message),
+      react: (message, emoji) => latest.current.react(message, emoji),
+    }),
+    []
+  );
+
+  const sheetMessage = sheet ? messages.find((message) => message._id === sheet.id) : null;
+
+  const handleSend = async (content) => {
+    await send(content, replyingTo?._id);
+    setReplyingTo(null);
+  };
+
+  const handleSendFiles = async (files, content, onProgress) => {
+    await sendFiles(files, content, onProgress, replyingTo?._id);
+    setReplyingTo(null);
+  };
+
+  const handleSubmitEdit = async (content) => {
+    await editMessage(editing._id, content);
+    setEditing(null);
+  };
 
   const title = getConversationTitle(conversation, user._id);
   const typingText = formatTyping(getTypingNames(conversation._id));
@@ -210,9 +271,11 @@ export default function MessagePane({
               <MessageBubble
                 message={message}
                 mine={mine}
+                myId={user._id}
                 showSender={!mine && conversation.type === 'group'}
                 status={mine ? getMessageStatus(message, conversation, user._id) : 'sent'}
                 glowing={highlightId === message._id}
+                actions={actions}
               />
             </Fragment>
           );
@@ -241,12 +304,55 @@ export default function MessagePane({
 
       <div className="bg-slate-900 pb-[env(safe-area-inset-bottom)]">
         <MessageComposer
-          onSend={send}
-          onSendFiles={sendFiles}
+          onSend={handleSend}
+          onSendFiles={handleSendFiles}
           onTyping={notifyTyping}
           onStopTyping={stopTyping}
+          replyingTo={replyingTo}
+          onCancelReply={() => setReplyingTo(null)}
+          editing={editing}
+          onCancelEdit={() => setEditing(null)}
+          onSubmitEdit={handleSubmitEdit}
         />
       </div>
+
+      {sheet && sheetMessage && (
+        <MessageActionSheet
+          message={sheetMessage}
+          mine={sheetMessage.sender._id === user._id}
+          myId={user._id}
+          canEdit={sheet.canEdit}
+          onClose={() => setSheet(null)}
+          onReply={() => {
+            setEditing(null);
+            setReplyingTo(sheetMessage);
+            setSheet(null);
+          }}
+          onEdit={() => {
+            setReplyingTo(null);
+            setEditing(sheetMessage);
+            setSheet(null);
+          }}
+          onCopy={async () => {
+            try {
+              await navigator.clipboard.writeText(sheetMessage.content);
+              showToast({ title: 'Copied', text: 'The message is on your clipboard.' });
+            } catch {
+              throw new Error('Your browser did not allow copying.');
+            }
+          }}
+          onReact={(emoji) => reactToMessage(sheetMessage._id, emoji)}
+          onDelete={(scope) => deleteMessage(sheetMessage._id, scope)}
+          onReport={async (reason) => {
+            try {
+              await reportMessageRequest(conversation._id, sheetMessage._id, reason);
+              showToast({ title: 'Thanks for reporting', text: 'We will take a look.' });
+            } catch (err) {
+              throw new Error(getErrorMessage(err));
+            }
+          }}
+        />
+      )}
 
       {showProfile && other && (
         <UserProfileDialog userId={other._id} onClose={() => setShowProfile(false)} />
