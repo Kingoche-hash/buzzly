@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import { env } from '../config/env.js';
 import { redis } from '../config/redis.js';
 import User from '../models/User.js';
 import { AppError } from '../utils/AppError.js';
@@ -11,7 +12,7 @@ const LOCK_WINDOW_SECONDS = 15 * 60;
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 12);
 
 // Failed attempts are counted in Redis per email AND visitor address.
-const failureKey = (email, ip) => `login:fail:${email}:${ip}`;
+const failureKey = (email, ip) => `${env.redisPrefix}login:fail:${email}:${ip}`;
 
 const getFailures = async (key) => {
   try {

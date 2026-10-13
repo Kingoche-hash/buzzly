@@ -1,10 +1,11 @@
+import { env } from '../config/env.js';
 import { redis } from '../config/redis.js';
 import User from '../models/User.js';
 import Conversation from '../models/Conversation.js';
 import { getHiddenIds } from './block.service.js';
 
 // The whiteboard: one SET of connection ids per user.
-const socketsKey = (userId) => `presence:sockets:${userId}`;
+const socketsKey = (userId) => `${env.redisPrefix}presence:sockets:${userId}`;
 
 // Writes a connection on the board. Returns true if this is the user's FIRST connection.
 export const addConnection = async (userId, socketId) => {
@@ -35,7 +36,7 @@ export const filterOnline = async (userIds) => {
 
 // At startup: wipe the board and mark everyone offline (their connections died with the old server).
 export const resetPresence = async () => {
-  const stream = redis.scanStream({ match: 'presence:sockets:*', count: 100 });
+  const stream = redis.scanStream({ match: `${env.redisPrefix}presence:sockets:*`, count: 100 });
 
   for await (const keys of stream) {
     if (keys.length > 0) await redis.del(...keys);

@@ -40,6 +40,8 @@ export const env = {
   clientUrls,
   // How many hosting proxies sit in front of the server (0 on your computer, 1 on most hosts).
   trustProxy: Number(process.env.TRUST_PROXY) || 0,
+  // Put in front of every Redis key, so development and production can share one free Redis safely.
+  redisPrefix: process.env.REDIS_KEY_PREFIX || '',
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   cloudinary: {

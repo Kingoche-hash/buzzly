@@ -19,6 +19,10 @@
         } catch (e) {}
       })();
     </script>
+      <!-- Wakes the (free) server while the page loads, so the first login is not slow. -->
+    <script>
+      fetch('%VITE_API_URL%/health', { mode: 'no-cors' }).catch(function () {});
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -32,5 +32,8 @@
     "ioredis-mock": "^8.13.1",
     "socket.io-client": "^4.8.4",
     "supertest": "^7.3.1"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

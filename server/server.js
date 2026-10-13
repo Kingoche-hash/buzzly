@@ -19,7 +19,8 @@ const start = async () => {
   try {
     await connectDB();
     await connectRedis();
-    await resetPresence();
+    // Clearing old presence is housekeeping: if Redis is slow or over its free limit, the server should still start.
+    await resetPresence().catch((error) => console.error('Could not reset presence:', error.message));
 
     server.listen(env.port, () => {
       console.log(`Server running on port ${env.port} (${env.nodeEnv})`);
