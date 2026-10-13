@@ -8,6 +8,8 @@ import {
   setReactionRequest,
 } from '../services/chat.service';
 import { getErrorMessage } from '../utils/getErrorMessage';
+import { removeArrived, removePending, updatePending } from '../utils/pending';
+import { useAuth } from './useAuth';
 import { useSocket } from './useSocket';
 
 const union = (a = [], b = []) => [...new Set([...a, ...b])];
@@ -43,6 +45,8 @@ const withReceipt = (message, field, userId) =>
 // aroundId: open the conversation around this message (used when jumping to a search result).
 export const useMessages = (conversationId, aroundId = null) => {
   const { socket } = useSocket();
+  const { user } = useAuth();
+  const myId = user._id;
 
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,11 +61,20 @@ export const useMessages = (conversationId, aroundId = null) => {
   const [newerCursor, setNewerCursor] = useState(null);
   const [loadingNewer, setLoadingNewer] = useState(false);
 
+  // Messages I am sending right now, or that could not be sent.
+  const [pending, setPending] = useState([]);
+  const pendingRef = useRef([]);
+  const tempCounter = useRef(0);
+
   const hasNewerRef = useRef(Boolean(aroundId));
 
   useEffect(() => {
     hasNewerRef.current = hasNewer;
   }, [hasNewer]);
+
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
 
   const addMessage = useCallback((message) => {
     setMessages((prev) => mergeMessages(prev, [message]));
@@ -101,6 +114,11 @@ export const useMessages = (conversationId, aroundId = null) => {
     const handleMessage = (message) => {
       if (message.conversation !== conversationId) return;
 
+      // My own message came back through the live line: it is no longer "sending".
+      if (message.sender._id === myId) {
+        setPending((prev) => removeArrived(prev, message.content));
+      }
+
       // While reading the past, new messages wait until "Jump to latest".
       if (hasNewerRef.current) return;
 
@@ -112,7 +130,7 @@ export const useMessages = (conversationId, aroundId = null) => {
     return () => {
       socket.off('receive_message', handleMessage);
     };
-  }, [socket, conversationId, addMessage]);
+  }, [socket, conversationId, addMessage, myId]);
 
   // A message in this chat changed (edited, deleted for everyone, reacted to) or was removed for me.
   useEffect(() => {
@@ -226,31 +244,72 @@ export const useMessages = (conversationId, aroundId = null) => {
     }
   }, [conversationId]);
 
-  // Sends text through the live line and waits for the server's "got it".
-  // replyTo: the id of the message this one answers (optional).
-  const send = useCallback(
-    (content, replyTo) =>
-      new Promise((resolve, reject) => {
-        if (!socket || !socket.connected) {
-          reject(new Error('Not connected to the server yet'));
-          return;
-        }
+  // Tries to send one waiting message through the live line.
+  const attempt = useCallback(
+    (item) => {
+      const change = (patch) => setPending((prev) => updatePending(prev, item.tempId, patch));
+      const fail = (reason) => change({ status: 'failed', error: reason });
 
-        socket
-          .timeout(8000)
-          .emit('send_message', { conversationId, content, replyTo }, (err, response) => {
-            if (err) return reject(new Error('The server did not answer. Please try again.'));
-            if (!response.ok) return reject(new Error(response.error));
+      change({ status: 'sending', error: '' });
+
+      if (!socket || !socket.connected) {
+        fail('Not connected to the server yet.');
+        return;
+      }
+
+      socket
+        .timeout(8000)
+        .emit(
+          'send_message',
+          { conversationId, content: item.content, replyTo: item.replyTo },
+          (err, response) => {
+            if (err) return fail('The server did not answer.');
+            if (!response.ok) return fail(response.error);
+
+            setPending((prev) => removePending(prev, item.tempId));
 
             // If we were reading the past, go to the latest so the new message is visible.
             if (hasNewerRef.current) jumpToLatest();
             else addMessage(response.message);
-
-            resolve();
-          });
-      }),
+          }
+        );
+    },
     [socket, conversationId, addMessage, jumpToLatest]
   );
+
+  // Sends text. The message shows up at once as "sending" and turns into a real message when saved,
+  // or into a "not sent" message with Retry if it fails.
+  // replyTo: the id of the message this one answers (optional). replyPreview: what to show of it meanwhile.
+  const send = useCallback(
+    async (content, replyTo, replyPreview) => {
+      tempCounter.current += 1;
+
+      const item = {
+        tempId: `pending-${tempCounter.current}`,
+        content,
+        replyTo,
+        replyPreview,
+        status: 'sending',
+        error: '',
+      };
+
+      setPending((prev) => [...prev, item]);
+      attempt(item);
+    },
+    [attempt]
+  );
+
+  const retryPending = useCallback(
+    (tempId) => {
+      const item = pendingRef.current.find((entry) => entry.tempId === tempId);
+      if (item) attempt(item);
+    },
+    [attempt]
+  );
+
+  const discardPending = useCallback((tempId) => {
+    setPending((prev) => removePending(prev, tempId));
+  }, []);
 
   // Sends files (with an optional caption) to the server, which stores them in Cloudinary.
   const sendFiles = useCallback(
@@ -312,6 +371,7 @@ export const useMessages = (conversationId, aroundId = null) => {
 
   return {
     messages,
+    pending,
     loading,
     error,
     hasMore,
@@ -322,6 +382,8 @@ export const useMessages = (conversationId, aroundId = null) => {
     loadNewer,
     jumpToLatest,
     send,
+    retryPending,
+    discardPending,
     sendFiles,
     editMessage,
     deleteMessage,

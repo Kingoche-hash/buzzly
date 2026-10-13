@@ -3,13 +3,16 @@ import { useAuth } from '../hooks/useAuth';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { ACCEPT, formatFileSize, validateFiles } from '../utils/attachments';
 import { getDisplayName } from '../utils/conversation';
+import { getDraft, saveDraft } from '../utils/drafts';
 import { findMentionQuery } from '../utils/mentions';
 import { getMessagePreview } from '../utils/messagePreview';
 import Avatar from './Avatar';
 import EmojiPicker from './EmojiPicker';
 
 // members: the group's member list (to suggest @mentions), or null in a direct chat.
+// conversationId: used to keep an unsent draft for this chat.
 export default function MessageComposer({
+  conversationId,
   onSend,
   onSendFiles,
   onTyping,
@@ -23,7 +26,8 @@ export default function MessageComposer({
 }) {
   const { user } = useAuth();
 
-  const [text, setText] = useState('');
+  // The text I wrote earlier and did not send comes back.
+  const [text, setText] = useState(() => getDraft(user._id, conversationId));
   const [files, setFiles] = useState([]);
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
@@ -35,6 +39,15 @@ export default function MessageComposer({
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
   const emojiRef = useRef(null);
+
+  // While a message is being edited, the draft I was writing waits here and comes back afterwards.
+  const textRef = useRef(text);
+  const stashRef = useRef('');
+  const wasEditingRef = useRef(false);
+
+  useEffect(() => {
+    textRef.current = text;
+  });
 
   useClickOutside(emojiRef, () => setShowEmoji(false), showEmoji);
 
@@ -54,17 +67,33 @@ export default function MessageComposer({
       .slice(0, 6);
   }, [mention, members, user._id]);
 
-  // Starting an edit puts the message's text in the box.
+  // Starting an edit puts the message's text in the box. When the edit ends (saved, cancelled, or
+  // replaced by a reply), the draft comes back.
   useEffect(() => {
-    if (!editing) return;
+    if (editing) {
+      if (!wasEditingRef.current) stashRef.current = textRef.current;
+      wasEditingRef.current = true;
 
-    setText(editing.content || '');
-    setFiles([]);
-    setError('');
-    setShowEmoji(false);
-    setMention(null);
-    inputRef.current?.focus();
+      setText(editing.content || '');
+      setFiles([]);
+      setError('');
+      setShowEmoji(false);
+      setMention(null);
+      inputRef.current?.focus();
+      return;
+    }
+
+    if (wasEditingRef.current) {
+      wasEditingRef.current = false;
+      setText(stashRef.current);
+      stashRef.current = '';
+    }
   }, [editing]);
+
+  // Every change of the text is saved as a draft (except while editing a sent message).
+  useEffect(() => {
+    if (!editing) saveDraft(user._id, conversationId, text);
+  }, [text, editing, user._id, conversationId]);
 
   // Replying puts the cursor in the box.
   useEffect(() => {
@@ -108,7 +137,6 @@ export default function MessageComposer({
 
   const handleCancelEdit = () => {
     onCancelEdit();
-    setText('');
     setError('');
   };
 
@@ -193,7 +221,7 @@ export default function MessageComposer({
     const content = text.trim();
     if (sending) return;
 
-    // Saving an edit.
+    // Saving an edit. The draft comes back by itself when the edit ends.
     if (editing) {
       if (!content) return;
 
@@ -202,7 +230,6 @@ export default function MessageComposer({
 
       try {
         await onSubmitEdit(content);
-        setText('');
       } catch (err) {
         setError(err.message);
       } finally {
@@ -225,6 +252,7 @@ export default function MessageComposer({
         await onSendFiles(files, content, setProgress);
         setFiles([]);
       } else {
+        // The message appears in the chat at once as "sending"; it has its own Retry if it fails.
         await onSend(content);
       }
 

@@ -12,6 +12,7 @@ import { formatDayLabel } from '../utils/formatDay';
 import { formatTime } from '../utils/formatTime';
 import { formatTyping } from '../utils/formatTyping';
 import { getMessagePreview } from '../utils/messagePreview';
+import { getDraft } from '../utils/drafts';
 import Avatar from './Avatar';
 import FilterMenu from './FilterMenu';
 import { ConversationListSkeleton } from './Skeleton';
@@ -231,6 +232,7 @@ export default function Sidebar({
               const unread = conversation.unreadCount || 0;
               const state = getState(conversation);
               const muted = isMuted(conversation);
+              const draft = getDraft(user._id, conversation._id);
 
               return (
                 <li
@@ -267,6 +269,10 @@ export default function Sidebar({
                         {filter === 'deleted' && state.deletedAt ? (
                           <span className="block truncate text-sm text-slate-400">
                             Deleted {formatDayLabel(state.deletedAt)}
+                          </span>
+                        ) : draft && conversation._id !== activeId ? (
+                          <span className="block truncate text-sm text-slate-400">
+                            <span className="text-emerald-400">Draft:</span> {draft}
                           </span>
                         ) : typingText ? (
                           <span className="block truncate text-sm italic text-emerald-400">
