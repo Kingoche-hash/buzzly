@@ -21,12 +21,15 @@ export default function FeedPanel({ onBack }) {
   const {
     posts,
     loading,
+    refreshing,
     error,
+    refreshError,
     hasMore,
     loadingMore,
     moreError,
     loadMore,
     reload,
+    refresh,
     newCount,
     updatePost,
     removePost,
@@ -54,9 +57,12 @@ export default function FeedPanel({ onBack }) {
     return () => observer.disconnect();
   }, [hasMore, moreError, loadMore, posts.length]);
 
-  const showNewPosts = () => {
-    reload();
-    scrollRef.current?.scrollTo({ top: 0 });
+  // Fetch the newest posts and go to the top. Used by the refresh button and the "new posts" button.
+  const handleRefresh = () => {
+    if (refreshing) return;
+
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    refresh();
   };
 
   return (
@@ -71,10 +77,24 @@ export default function FeedPanel({ onBack }) {
           ←
         </button>
         <h1 className="font-semibold">Feed</h1>
+
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          aria-label={refreshing ? 'Refreshing the feed' : 'Refresh the feed'}
+          title="Refresh"
+          className="ml-auto rounded-lg bg-slate-700 px-3 py-1 text-lg leading-none hover:bg-slate-600 disabled:opacity-60"
+        >
+          <span aria-hidden="true" className={`inline-block ${refreshing ? 'animate-spin' : ''}`}>
+            ↻
+          </span>
+        </button>
+
         <button
           type="button"
           onClick={() => setComposing(true)}
-          className="ml-auto rounded-lg bg-emerald-600 px-3 py-1 text-sm font-semibold hover:bg-emerald-500"
+          className="rounded-lg bg-emerald-600 px-3 py-1 text-sm font-semibold hover:bg-emerald-500"
         >
           ＋ New post
         </button>
@@ -85,14 +105,23 @@ export default function FeedPanel({ onBack }) {
           {newCount > 0 && (
             <button
               type="button"
-              onClick={showNewPosts}
+              onClick={handleRefresh}
               className="sticky top-2 z-10 mx-auto block rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold shadow-lg hover:bg-emerald-500"
             >
               ↑ {newCount === 1 ? '1 new post' : `${newCount} new posts`}
             </button>
           )}
 
-          {loading && (
+          {refreshError && (
+            <p role="alert" className="rounded-lg bg-red-950/60 px-3 py-2 text-center text-sm text-red-300">
+              Could not refresh. {refreshError}{' '}
+              <button type="button" onClick={handleRefresh} className="underline">
+                Try again
+              </button>
+            </p>
+          )}
+
+          {loading && posts.length === 0 && (
             <>
               <PostSkeleton />
               <PostSkeleton />

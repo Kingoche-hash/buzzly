@@ -20,7 +20,9 @@ export const usePosts = ({ userId = null, type, live = false, limit = 10 } = {})
 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [refreshError, setRefreshError] = useState('');
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -30,7 +32,10 @@ export const usePosts = ({ userId = null, type, live = false, limit = 10 } = {})
 
   const loadingMoreRef = useRef(false);
 
-  // Load the first page (again, when reload() is called).
+  // True while the load in progress is a quiet refresh (the old posts stay on screen).
+  const quietRef = useRef(false);
+
+  // Load the first page (again, when reload() or refresh() is called).
   useEffect(() => {
     let cancelled = false;
 
@@ -41,12 +46,21 @@ export const usePosts = ({ userId = null, type, live = false, limit = 10 } = {})
         setHasMore(data.hasMore);
         setCursor(data.nextCursor);
         setError('');
+        setRefreshError('');
       })
       .catch((err) => {
-        if (!cancelled) setError(getErrorMessage(err));
+        if (cancelled) return;
+
+        // A failed quiet refresh keeps the old posts and only shows a small message.
+        if (quietRef.current) setRefreshError(getErrorMessage(err));
+        else setError(getErrorMessage(err));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (cancelled) return;
+
+        quietRef.current = false;
+        setLoading(false);
+        setRefreshing(false);
       });
 
     return () => {
@@ -54,9 +68,21 @@ export const usePosts = ({ userId = null, type, live = false, limit = 10 } = {})
     };
   }, [userId, type, limit, reloadKey]);
 
+  // "Try again" after an error: starts from the skeletons again.
   const reload = useCallback(() => {
+    quietRef.current = false;
     setLoading(true);
     setError('');
+    setMoreError(false);
+    setNewCount(0);
+    setReloadKey((key) => key + 1);
+  }, []);
+
+  // The refresh button: fetch the newest posts, keep what is on screen until they arrive.
+  const refresh = useCallback(() => {
+    quietRef.current = true;
+    setRefreshing(true);
+    setRefreshError('');
     setMoreError(false);
     setNewCount(0);
     setReloadKey((key) => key + 1);
@@ -120,12 +146,15 @@ export const usePosts = ({ userId = null, type, live = false, limit = 10 } = {})
   return {
     posts,
     loading,
+    refreshing,
     error,
+    refreshError,
     hasMore,
     loadingMore,
     moreError,
     loadMore,
     reload,
+    refresh,
     newCount,
     updatePost,
     removePost,
