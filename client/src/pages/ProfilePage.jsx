@@ -1,11 +1,14 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Avatar from '../components/Avatar';
+import ConfirmDialog from '../components/ConfirmDialog';
 import PostComposer from '../components/PostComposer';
 import { useAuth } from '../hooks/useAuth';
+import { useClickOutside } from '../hooks/useClickOutside';
 import { usePosts } from '../hooks/usePosts';
 import { usePresence } from '../hooks/usePresence';
 import { useToast } from '../hooks/useToast';
+import { blockUserRequest, unblockUserRequest } from '../services/block.service';
 import { startDirectConversation } from '../services/chat.service';
 import { fetchPostSummaryRequest } from '../services/post.service';
 import { fetchUserProfile } from '../services/profile.service';
@@ -17,6 +20,8 @@ import { squareThumb } from '../utils/imageUrl';
 // These windows download only when someone opens them.
 const ProfileDialog = lazy(() => import('../components/ProfileDialog'));
 const ThemePicker = lazy(() => import('../components/ThemePicker'));
+const BlockedUsersDialog = lazy(() => import('../components/BlockedUsersDialog'));
+const ReportUserDialog = lazy(() => import('../components/ReportUserDialog'));
 
 const buttonClass = 'rounded-lg bg-slate-700 px-4 py-1.5 text-sm font-semibold hover:bg-slate-600';
 
@@ -155,6 +160,7 @@ function ProfileView({ userId }) {
   const isMe = userId === me._id;
 
   const [profile, setProfile] = useState(null);
+  const [profileKey, setProfileKey] = useState(0);
   const [state, setState] = useState(isMe ? 'ready' : 'loading'); // loading | ready | missing | error
   const [summary, setSummary] = useState({ posts: 0, reposts: 0 });
   const [summaryKey, setSummaryKey] = useState(0);
@@ -164,6 +170,12 @@ function ProfileView({ userId }) {
   const [showTheme, setShowTheme] = useState(false);
   const [composing, setComposing] = useState(false);
   const [messaging, setMessaging] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [dialog, setDialog] = useState(null); // 'block' | 'report' | 'blocked' | null
+  const [busy, setBusy] = useState(false);
+  const menuRef = useRef(null);
+
+  useClickOutside(menuRef, () => setMenuOpen(false), menuOpen);
 
   // Someone else: load their public profile. (My own comes from my login.)
   useEffect(() => {
@@ -184,7 +196,7 @@ function ProfileView({ userId }) {
     return () => {
       cancelled = true;
     };
-  }, [userId, isMe]);
+  }, [userId, isMe, profileKey]);
 
   // The numbers: posts and reposts.
   useEffect(() => {
@@ -228,7 +240,33 @@ function ProfileView({ userId }) {
     setTab('posts');
   };
 
-  const header = (title) => (
+  const handleBlock = async () => {
+    setDialog(null);
+
+    try {
+      await blockUserRequest(userId);
+      showToast({ title: 'Blocked', text: `${getDisplayName(person)} can no longer reach you.` });
+      setProfileKey((key) => key + 1);
+    } catch (err) {
+      showToast({ title: 'Could not block', text: getErrorMessage(err) });
+    }
+  };
+
+  const handleUnblock = async () => {
+    setBusy(true);
+
+    try {
+      await unblockUserRequest(userId);
+      showToast({ title: 'Unblocked', text: `${getDisplayName(person)} can reach you again.` });
+      setProfileKey((key) => key + 1);
+    } catch (err) {
+      showToast({ title: 'Could not unblock', text: getErrorMessage(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const header = (title, right = null) => (
     <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-700 bg-slate-900/95 px-4 py-3 backdrop-blur">
       <button
         type="button"
@@ -239,6 +277,7 @@ function ProfileView({ userId }) {
         ←
       </button>
       <h1 className="truncate font-semibold">{title}</h1>
+      {right}
     </header>
   );
 
@@ -271,12 +310,91 @@ function ProfileView({ userId }) {
   }
 
   const name = getDisplayName(person);
+
+  // Someone I blocked: a small card with only an Unblock button.
+  if (person.blockedByMe) {
+    return (
+      <div className="h-dvh overflow-y-auto bg-slate-900 text-slate-100">
+        {header(`@${person.username}`)}
+
+        <main className="mx-auto flex w-full max-w-md flex-col items-center px-4 py-12 text-center">
+          <Avatar name={name} src={person.avatar} size="xl" />
+          <h2 className="mt-4 break-words text-2xl font-semibold">{name}</h2>
+          <p className="text-slate-400">@{person.username}</p>
+
+          <p className="mt-6 font-medium text-slate-200">You blocked this account.</p>
+          <p className="mt-1 text-sm text-slate-400">
+            They can't message you, find you, or see your profile, posts or stories.
+          </p>
+
+          <button
+            type="button"
+            onClick={handleUnblock}
+            disabled={busy}
+            className="mt-6 rounded-lg bg-emerald-600 px-6 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60"
+          >
+            {busy ? 'Unblocking...' : 'Unblock'}
+          </button>
+        </main>
+      </div>
+    );
+  }
+
   const online = isOnline(userId);
   const shownPresence = !isMe && person.showsPresence !== false;
 
+  const menu = !isMe && (
+    <div ref={menuRef} className="relative ml-auto">
+      <button
+        type="button"
+        onClick={() => setMenuOpen((open) => !open)}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-label="Profile options"
+        className="rounded-lg px-3 py-1 text-lg hover:bg-slate-700"
+      >
+        ⋯
+      </button>
+
+      {menuOpen && (
+        <ul
+          role="menu"
+          className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-xl border border-slate-600 bg-slate-800 py-1 shadow-xl"
+        >
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                setDialog('report');
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-700"
+            >
+              <span aria-hidden="true">🚩</span> Report
+            </button>
+          </li>
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                setDialog('block');
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-400 hover:bg-slate-700"
+            >
+              <span aria-hidden="true">⛔</span> Block
+            </button>
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+
   return (
     <div className="h-dvh overflow-y-auto bg-slate-900 text-slate-100">
-      {header(`@${person.username}`)}
+      {header(`@${person.username}`, menu)}
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
         <section className="flex flex-col items-center gap-5 sm:flex-row sm:items-start sm:gap-10">
@@ -322,6 +440,9 @@ function ProfileView({ userId }) {
                   </button>
                   <button type="button" onClick={() => setShowTheme(true)} className={buttonClass}>
                     🎨 Appearance
+                  </button>
+                  <button type="button" onClick={() => setDialog('blocked')} className={buttonClass}>
+                    🚫 Blocked users
                   </button>
                   <button
                     type="button"
@@ -375,7 +496,28 @@ function ProfileView({ userId }) {
       <Suspense fallback={null}>
         {editing && <ProfileDialog onClose={() => setEditing(false)} />}
         {showTheme && <ThemePicker onClose={() => setShowTheme(false)} />}
+        {dialog === 'blocked' && <BlockedUsersDialog onClose={() => setDialog(null)} />}
+        {dialog === 'report' && (
+          <ReportUserDialog
+            person={person}
+            onClose={() => setDialog(null)}
+            onDone={(alsoBlocked) => {
+              if (alsoBlocked) setProfileKey((key) => key + 1);
+            }}
+          />
+        )}
       </Suspense>
+
+      {dialog === 'block' && (
+        <ConfirmDialog
+          title={`Block ${name}?`}
+          message="They won't be able to message you, find you, or see your profile, posts, stories or when you are online. Your chat with them will be hidden. You can unblock them any time from your profile."
+          confirmLabel="Block"
+          danger
+          onConfirm={handleBlock}
+          onCancel={() => setDialog(null)}
+        />
+      )}
 
       {composing && <PostComposer onClose={() => setComposing(false)} onPosted={handlePosted} />}
     </div>

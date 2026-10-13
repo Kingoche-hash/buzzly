@@ -18,6 +18,7 @@ import {
 } from '../controllers/post.controller.js';
 import { protect } from '../middleware/auth.js';
 import { commentLimiter, postLimiter, uploadLimiter } from '../middleware/rateLimiter.js';
+import { requireVisiblePostAuthor } from '../middleware/requireVisiblePostAuthor.js';
 import { uploadPostImages } from '../middleware/uploadPostImages.js';
 import { validate } from '../middleware/validate.js';
 import {
@@ -48,19 +49,27 @@ router.get(
   getUserPostsHandler
 );
 
-router.get('/:postId', validate(postIdParams, 'params'), getPostHandler);
+// "requireVisiblePostAuthor": a post by a blocked person (either way) does not exist for me.
+router.get('/:postId', validate(postIdParams, 'params'), requireVisiblePostAuthor, getPostHandler);
 router.delete('/:postId', validate(postIdParams, 'params'), deleteMyPost);
 
-router.post('/:postId/like', validate(postIdParams, 'params'), likeHandler);
+router.post('/:postId/like', validate(postIdParams, 'params'), requireVisiblePostAuthor, likeHandler);
 router.delete('/:postId/like', validate(postIdParams, 'params'), unlikeHandler);
 
-router.post('/:postId/repost', commentLimiter, validate(postIdParams, 'params'), repostHandler);
+router.post(
+  '/:postId/repost',
+  commentLimiter,
+  validate(postIdParams, 'params'),
+  requireVisiblePostAuthor,
+  repostHandler
+);
 router.delete('/:postId/repost', validate(postIdParams, 'params'), unrepostHandler);
 
 router.post(
   '/:postId/share',
   commentLimiter,
   validate(postIdParams, 'params'),
+  requireVisiblePostAuthor,
   validate(sharePostSchema),
   shareHandler
 );
@@ -68,6 +77,7 @@ router.post(
 router.get(
   '/:postId/comments',
   validate(postIdParams, 'params'),
+  requireVisiblePostAuthor,
   validate(commentsQuerySchema, 'query'),
   getCommentsHandler
 );
@@ -75,6 +85,7 @@ router.post(
   '/:postId/comments',
   commentLimiter,
   validate(postIdParams, 'params'),
+  requireVisiblePostAuthor,
   validate(addCommentSchema),
   addCommentHandler
 );
@@ -84,6 +95,7 @@ router.post(
   '/:postId/report',
   commentLimiter,
   validate(postIdParams, 'params'),
+  requireVisiblePostAuthor,
   validate(reportSchema),
   reportHandler
 );

@@ -10,6 +10,7 @@ import { userRoom } from '../socket/emitters.js';
 import { getIO } from '../socket/io.js';
 import { broadcastProfileUpdate, broadcastVisibilityChange } from '../socket/presence.js';
 import { AppError } from '../utils/AppError.js';
+import { removeUserBlocks } from '../services/block.service.js';
 import { removeUserContent } from '../services/post.service.js';
 import { signToken } from '../utils/token.js';
 
@@ -66,6 +67,9 @@ export const deleteMyAccount = async (req, res) => {
   // Their posts, comments and likes go too. A failure here must not undo the deletion.
   await removeUserContent(req.user._id).catch((error) =>
     console.error('Could not remove the content of a deleted account:', error.message)
+  );
+  await removeUserBlocks(req.user._id).catch((error) =>
+    console.error('Could not remove the blocks of a deleted account:', error.message)
   );
 
   // Hang up every open connection of this person.

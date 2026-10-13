@@ -127,11 +127,19 @@ export const useConversations = (activeId = null) => {
       );
     };
 
+    // A block was added or removed (by me or by someone else): fetch the list again, quietly.
+    const handleBlocks = () => {
+      fetchConversations()
+        .then((list) => setConversations(list))
+        .catch(() => {});
+    };
+
     socket.on('receive_message', handleMessage);
     socket.on('conversation_created', handleCreated);
     socket.on('messages_read', handleRead);
     socket.on('conversation_state', handleState);
     socket.on('profile_updated', handleProfile);
+    socket.on('blocks_changed', handleBlocks);
 
     return () => {
       socket.off('receive_message', handleMessage);
@@ -139,6 +147,7 @@ export const useConversations = (activeId = null) => {
       socket.off('messages_read', handleRead);
       socket.off('conversation_state', handleState);
       socket.off('profile_updated', handleProfile);
+      socket.off('blocks_changed', handleBlocks);
     };
   }, [socket, myId]);
 

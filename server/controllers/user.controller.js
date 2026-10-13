@@ -7,6 +7,6 @@ export const searchUsersHandler = async (req, res) => {
 };
 
 export const getUserProfileHandler = async (req, res) => {
-  const user = await getPublicProfile(req.params.userId);
+  const user = await getPublicProfile(req.params.userId, req.user._id);
   res.status(200).json({ user });
 };

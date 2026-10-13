@@ -7,6 +7,7 @@ import Avatar from './Avatar';
 import ConfirmDialog from './confirmDialog';
 import Modal from './Modal';
 import UserProfileDialog from './UserProfileDialog';
+import { blockUserRequest } from '../services/block.service';
 import WallpaperPicker from './WallpaperPicker';
 
 function MenuItem({ icon, onClick, danger = false, children }) {
@@ -34,6 +35,12 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
   const state = getState(conversation);
   const muted = isMuted(conversation);
 
+  // In a direct chat: the other person (the one I can block).
+  const otherPerson =
+    conversation.type === 'direct'
+      ? conversation.members.find((member) => member._id !== currentUserId)
+      : null;
+
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState(null); // 'delete' | 'wallpaper' | 'members' | null
   const [profileId, setProfileId] = useState(null);
@@ -51,6 +58,18 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
       if (leave) onLeave();
     } catch {
       showToast({ title: 'Could not save the change', text: 'Please try again.' });
+    }
+  };
+
+  const handleBlock = async () => {
+    setDialog(null);
+
+    try {
+      await blockUserRequest(otherPerson._id);
+      onLeave();
+      showToast({ title: 'Blocked', text: getDisplayName(otherPerson) + ' can no longer reach you.' });
+    } catch {
+      showToast({ title: 'Could not block', text: 'Please try again.' });
     }
   };
 
@@ -126,6 +145,19 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
             {state.spam ? 'Not spam' : 'Report as spam'}
           </MenuItem>
 
+          {otherPerson && (
+            <MenuItem
+              icon="⛔"
+              danger
+              onClick={() => {
+                setOpen(false);
+                setDialog('block');
+              }}
+            >
+              Block {getDisplayName(otherPerson)}
+            </MenuItem>
+          )}
+
           <MenuItem
             icon="🗑️"
             danger
@@ -137,6 +169,17 @@ export default function ChatMenu({ conversation, currentUserId, onUpdate, onLeav
             Delete chat
           </MenuItem>
         </ul>
+      )}
+
+      {dialog === 'block' && otherPerson && (
+        <ConfirmDialog
+          title={'Block ' + getDisplayName(otherPerson) + '?'}
+          message="They won't be able to message you, find you, or see your profile, posts, stories or when you are online. This chat will be hidden. You can unblock them any time from your profile."
+          confirmLabel="Block"
+          danger
+          onConfirm={handleBlock}
+          onCancel={() => setDialog(null)}
+        />
       )}
 
       {dialog === 'delete' && (

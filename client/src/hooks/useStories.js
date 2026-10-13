@@ -36,9 +36,11 @@ export const useStories = () => {
     if (!socket) return;
 
     socket.on('stories_changed', reload);
+    socket.on('blocks_changed', reload);
 
     return () => {
       socket.off('stories_changed', reload);
+      socket.off('blocks_changed', reload);
     };
   }, [socket, reload]);
 

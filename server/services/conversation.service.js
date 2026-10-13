@@ -2,6 +2,7 @@ import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
 import { AppError } from '../utils/AppError.js';
+import { getBlockState, getHiddenIds, isHiddenBetween } from './block.service.js';
 import { DEFAULT_STATE, getStatesById } from './conversationState.service.js';
 
 const MEMBER_FIELDS =
@@ -21,11 +22,20 @@ const hidePrivateDetails = (conversationJson) => ({
 });
 
 // The access check used everywhere: is this user sitting at this table?
+// A direct chat with someone who is blocked (in either direction) does not exist for either person.
 export const getConversationForMember = async (conversationId, userId) => {
   const conversation = await Conversation.findOne({ _id: conversationId, members: userId });
 
   if (!conversation) {
     throw new AppError('Conversation not found', 404);
+  }
+
+  if (conversation.type === 'direct') {
+    const other = conversation.members.find((id) => id.toString() !== userId.toString());
+
+    if (other && (await isHiddenBetween(userId, other))) {
+      throw new AppError('Conversation not found', 404);
+    }
   }
 
   return conversation;
@@ -39,6 +49,17 @@ export const createDirectConversation = async (currentUserId, otherUserId) => {
   const other = await User.findOne({ _id: otherUserId, deletedAt: null }).select('_id');
   if (!other) {
     throw new AppError('User not found', 404);
+  }
+
+  // Someone who blocked me looks like a missing account. Someone I blocked needs unblocking first.
+  const { blockedByMe, blockedMe } = await getBlockState(currentUserId);
+
+  if (blockedMe.has(otherUserId)) {
+    throw new AppError('User not found', 404);
+  }
+
+  if (blockedByMe.has(otherUserId)) {
+    throw new AppError('You blocked this person. Unblock them to send messages.', 403);
   }
 
   const directKey = [currentUserId.toString(), otherUserId].sort().join('_');
@@ -90,9 +111,19 @@ export const createGroupConversation = async (currentUserId, { name, memberIds }
 };
 
 // My conversations, newest first. Each has my unread count and my private settings (pinned, muted...).
+// Direct chats with blocked people (either way) are left out; groups stay.
 export const listConversations = async (userId) => {
-  const conversations = await populateConversation(
-    Conversation.find({ members: userId }).sort({ lastMessageAt: -1 })
+  const [found, hidden] = await Promise.all([
+    populateConversation(Conversation.find({ members: userId }).sort({ lastMessageAt: -1 })),
+    getHiddenIds(userId),
+  ]);
+
+  const hiddenSet = new Set(hidden);
+
+  const conversations = found.filter(
+    (conversation) =>
+      conversation.type !== 'direct' ||
+      !conversation.members.some((member) => hiddenSet.has(member._id.toString()))
   );
 
   if (conversations.length === 0) return [];
@@ -133,6 +164,14 @@ export const getConversation = async (conversationId, userId) => {
 
   if (!conversation) {
     throw new AppError('Conversation not found', 404);
+  }
+
+  if (conversation.type === 'direct') {
+    const other = conversation.members.find((member) => member._id.toString() !== userId.toString());
+
+    if (other && (await isHiddenBetween(userId, other._id))) {
+      throw new AppError('Conversation not found', 404);
+    }
   }
 
   return hidePrivateDetails(conversation.toJSON());

@@ -5,20 +5,20 @@ import {
   countConnections,
   markOnline,
   markOffline,
-  getConversationIdsFor,
+  getContactIds,
 } from '../services/presence.service.js';
-import { conversationRoom } from './emitters.js';
+import { userRoom } from './emitters.js';
 import { getIO } from './io.js';
 
 // After the last connection closes, wait a little in case it was just a page refresh.
 const OFFLINE_GRACE_MS = 5000;
 
-// Shout into every room the user belongs to, so only people who share a chat hear it.
+// Tell the person's own windows and their contacts. Contacts are people who share a chat with
+// them and have no block with them, so a blocked person hears nothing.
 const broadcastToContacts = async (io, userId, event, payload) => {
-  const conversationIds = await getConversationIdsFor(userId);
-  if (conversationIds.length === 0) return;
+  const contactIds = await getContactIds(userId);
 
-  io.to(conversationIds.map(conversationRoom)).emit(event, payload);
+  io.to([userId, ...contactIds].map(userRoom)).emit(event, payload);
 };
 
 export const handlePresenceConnect = async (io, socket) => {

@@ -1,6 +1,7 @@
 import { redis } from '../config/redis.js';
 import User from '../models/User.js';
 import Conversation from '../models/Conversation.js';
+import { getHiddenIds } from './block.service.js';
 
 // The whiteboard: one SET of connection ids per user.
 const socketsKey = (userId) => `presence:sockets:${userId}`;
@@ -53,9 +54,18 @@ export const markOffline = async (userId) => {
 };
 
 // Everyone who shares at least one conversation with this user.
+// People I blocked, and people who blocked me, are not contacts: they never learn anything about me.
 export const getContactIds = async (userId) => {
-  const ids = await Conversation.distinct('members', { members: userId });
-  return ids.map((id) => id.toString()).filter((id) => id !== userId.toString());
+  const [ids, hidden] = await Promise.all([
+    Conversation.distinct('members', { members: userId }),
+    getHiddenIds(userId),
+  ]);
+
+  const hiddenSet = new Set(hidden);
+
+  return ids
+    .map((id) => id.toString())
+    .filter((id) => id !== userId.toString() && !hiddenSet.has(id));
 };
 
 export const getConversationIdsFor = async (userId) => {

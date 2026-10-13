@@ -7,6 +7,7 @@ import Report from '../models/Report.js';
 import { AppError } from '../utils/AppError.js';
 import { hasValidSignature } from '../utils/fileSignature.js';
 import { getConversationForMember } from './conversation.service.js';
+import { getHiddenIds } from './block.service.js';
 import { createMessage } from './message.service.js';
 
 const FOLDER = 'chatapp/posts';
@@ -181,8 +182,17 @@ export const listPosts = async ({ viewerId, authorId, type, before, limit }) => 
   // Posts I reported never show up for me again.
   const reported = new Set((await Report.distinct('post', { reporter: viewerId })).map(String));
 
+  // People I blocked, and people who blocked me, are invisible to me.
+  const hidden = await getHiddenIds(viewerId);
+  const hiddenSet = new Set(hidden);
+
+  if (authorId && hiddenSet.has(authorId.toString())) {
+    return { posts: [], hasMore: false, nextCursor: null };
+  }
+
   const filter = { hidden: false };
   if (authorId) filter.author = authorId;
+  else if (hidden.length > 0) filter.author = { $nin: hidden };
   if (type === 'posts') filter.isRepost = { $ne: true };
   if (type === 'reposts') filter.isRepost = true;
   if (before) filter._id = { $lt: before };
@@ -202,7 +212,11 @@ export const listPosts = async ({ viewerId, authorId, type, before, limit }) => 
     if (!item.author) return false;
 
     if (item.isRepost) {
-      return Boolean(item.repostOf?.author) && !reported.has(item.repostOf._id.toString());
+      return (
+        Boolean(item.repostOf?.author) &&
+        !reported.has(item.repostOf._id.toString()) &&
+        !hiddenSet.has(item.repostOf.author._id.toString())
+      );
     }
 
     return !reported.has(item._id.toString());
@@ -360,6 +374,7 @@ export const sharePost = async ({ userId, postId, conversationIds, text }) => {
 
 export const listComments = async ({ viewerId, postId, before, limit }) => {
   const post = await loadVisiblePost(postId);
+  const hidden = new Set(await getHiddenIds(viewerId));
 
   const filter = { post: postId };
   if (before) filter._id = { $lt: before };
@@ -374,7 +389,7 @@ export const listComments = async ({ viewerId, postId, before, limit }) => {
   const nextCursor = hasMore ? page.at(-1)._id : null;
 
   const comments = page
-    .filter((comment) => comment.author)
+    .filter((comment) => comment.author && !hidden.has(comment.author._id.toString()))
     .map((comment) => toCommentDto(comment, viewerId, post.author._id));
 
   return { comments, hasMore, nextCursor };
