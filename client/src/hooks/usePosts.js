@@ -5,13 +5,16 @@ import { useAuth } from './useAuth';
 import { useSocket } from './useSocket';
 
 const addUnique = (list, extra) => {
-  const seen = new Set(list.map((post) => post._id));
-  return [...list, ...extra.filter((post) => !seen.has(post._id))];
+  const seen = new Set(list.map((post) => post.itemId));
+  return [...list, ...extra.filter((post) => !seen.has(post.itemId))];
 };
 
 // The feed (everyone's posts), or one person's posts when userId is given.
-// live: also count new posts that other people publish while this is open.
-export const usePosts = ({ userId = null, live = false } = {}) => {
+// type: 'posts' or 'reposts' (profile tabs). live: also count new posts that others publish.
+//
+// A repost is a separate ENTRY (itemId) that points at the original post (_id),
+// so the same post can appear twice in a list.
+export const usePosts = ({ userId = null, type, live = false, limit = 10 } = {}) => {
   const { socket } = useSocket();
   const { user } = useAuth();
 
@@ -31,7 +34,7 @@ export const usePosts = ({ userId = null, live = false } = {}) => {
   useEffect(() => {
     let cancelled = false;
 
-    fetchFeedRequest({ userId })
+    fetchFeedRequest({ userId, type, limit })
       .then((data) => {
         if (cancelled) return;
         setPosts(data.posts);
@@ -49,7 +52,7 @@ export const usePosts = ({ userId = null, live = false } = {}) => {
     return () => {
       cancelled = true;
     };
-  }, [userId, reloadKey]);
+  }, [userId, type, limit, reloadKey]);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -59,7 +62,7 @@ export const usePosts = ({ userId = null, live = false } = {}) => {
     setReloadKey((key) => key + 1);
   }, []);
 
-  // Someone else published a post.
+  // Someone else published a post or a repost.
   useEffect(() => {
     if (!socket || !live) return;
 
@@ -82,7 +85,7 @@ export const usePosts = ({ userId = null, live = false } = {}) => {
     setMoreError(false);
 
     try {
-      const data = await fetchFeedRequest({ userId, before: cursor });
+      const data = await fetchFeedRequest({ userId, type, limit, before: cursor });
       setPosts((prev) => addUnique(prev, data.posts));
       setHasMore(data.hasMore);
       setCursor(data.nextCursor);
@@ -92,20 +95,26 @@ export const usePosts = ({ userId = null, live = false } = {}) => {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [hasMore, cursor, userId]);
+  }, [hasMore, cursor, userId, type, limit]);
 
-  // Change some fields of one post (a like, a comment count...).
+  // Change some fields of a post (a like, a comment count...) in every entry that shows it.
   const updatePost = useCallback((postId, patch) => {
     setPosts((prev) => prev.map((post) => (post._id === postId ? { ...post, ...patch } : post)));
   }, []);
 
+  // The post is gone (deleted, or reported by me): remove every entry that shows it.
   const removePost = useCallback((postId) => {
     setPosts((prev) => prev.filter((post) => post._id !== postId));
   }, []);
 
+  // Only one entry is gone (I undid my repost).
+  const removeItem = useCallback((itemId) => {
+    setPosts((prev) => prev.filter((post) => post.itemId !== itemId));
+  }, []);
+
   // My own new post goes straight to the top.
   const addPost = useCallback((post) => {
-    setPosts((prev) => [post, ...prev.filter((item) => item._id !== post._id)]);
+    setPosts((prev) => [post, ...prev.filter((item) => item.itemId !== post.itemId)]);
   }, []);
 
   return {
@@ -120,6 +129,7 @@ export const usePosts = ({ userId = null, live = false } = {}) => {
     newCount,
     updatePost,
     removePost,
+    removeItem,
     addPost,
   };
 };

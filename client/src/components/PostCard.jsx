@@ -1,16 +1,25 @@
 import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useToast } from '../hooks/useToast';
-import { deletePostRequest, likePostRequest, reportPostRequest, unlikePostRequest } from '../services/post.service';
+import {
+  deletePostRequest,
+  likePostRequest,
+  reportPostRequest,
+  repostRequest,
+  unlikePostRequest,
+  unrepostRequest,
+} from '../services/post.service';
 import { getDisplayName } from '../utils/conversation';
 import { getErrorMessage } from '../utils/getErrorMessage';
-import { fitWidth } from '../utils/imageUrl';
 import { timeAgo } from '../utils/timeAgo';
 import Avatar from './Avatar';
 import CommentsSection from './CommentsSection';
 import ConfirmDialog from './ConfirmDialog';
+import ImageCarousel from './ImageCarousel';
 import Modal from './Modal';
-import UserProfileDialog from './UserProfileDialog';
+import SharePostDialog from './SharePostDialog';
 
 const REASONS = [
   ['spam', 'Spam'],
@@ -19,24 +28,31 @@ const REASONS = [
   ['other', 'Something else'],
 ];
 
-// One post in the feed. `onChange(postId, patch)` and `onRemove(postId)` update the list it lives in.
-export default function PostCard({ post, onChange, onRemove, onMessage }) {
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+// One post in a feed, on a profile or on its own page.
+// onChange(postId, patch) and onRemove(postId) update the list it lives in;
+// onRemoveItem(itemId) removes just one entry (when I undo my repost).
+export default function PostCard({ post, onChange, onRemove, onRemoveItem, startOpen = false }) {
+  const { user } = useAuth();
   const { showToast } = useToast();
 
   const [liking, setLiking] = useState(false);
+  const [reposting, setReposting] = useState(false);
   const [burst, setBurst] = useState(false);
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(startOpen);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [dialog, setDialog] = useState(null); // 'delete' | 'report' | null
-  const [showProfile, setShowProfile] = useState(false);
+  const [dialog, setDialog] = useState(null); // 'delete' | 'report' | 'share' | null
   const menuRef = useRef(null);
 
   useClickOutside(menuRef, () => setMenuOpen(false), menuOpen);
 
   const name = getDisplayName(post.author);
+  const repostedByMe = post.repostedBy?._id === user._id;
 
-  // Pictures wider than 1.91:1 or taller than 4:5 are cropped, like on Instagram.
-  const ratio = Math.min(1.91, Math.max(0.8, (post.width || 1) / (post.height || 1)));
+  // The shape follows the first photo, between 1.91:1 and 4:5, like Instagram.
+  const first = post.images[0];
+  const ratio = Math.min(1.91, Math.max(0.8, (first?.width || 1) / (first?.height || 1)));
 
   // The number changes at once on screen, then the server confirms (or we put it back).
   const toggleLike = async () => {
@@ -60,6 +76,36 @@ export default function PostCard({ post, onChange, onRemove, onMessage }) {
       showToast({ title: 'Could not save your like', text: getErrorMessage(err) });
     } finally {
       setLiking(false);
+    }
+  };
+
+  const toggleRepost = async () => {
+    if (reposting || post.mine) return;
+
+    setReposting(true);
+
+    const nextReposted = !post.reposted;
+    const before = { reposted: post.reposted, repostCount: post.repostCount };
+
+    onChange(post._id, {
+      reposted: nextReposted,
+      repostCount: Math.max(0, post.repostCount + (nextReposted ? 1 : -1)),
+    });
+
+    try {
+      const result = nextReposted ? await repostRequest(post._id) : await unrepostRequest(post._id);
+      onChange(post._id, { reposted: result.reposted, repostCount: result.repostCount });
+
+      if (nextReposted) {
+        showToast({ title: 'Reposted', text: 'It now shows on your profile.' });
+      } else if (repostedByMe) {
+        onRemoveItem?.(post.itemId); // my repost entry is gone
+      }
+    } catch (err) {
+      onChange(post._id, before);
+      showToast({ title: 'Could not repost', text: getErrorMessage(err) });
+    } finally {
+      setReposting(false);
     }
   };
 
@@ -96,20 +142,34 @@ export default function PostCard({ post, onChange, onRemove, onMessage }) {
 
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-800">
+      {post.repostedBy && (
+        <p className="px-3 pt-3 text-xs text-slate-400">
+          🔁{' '}
+          {repostedByMe ? (
+            'You reposted'
+          ) : (
+            <>
+              <Link to={`/u/${post.repostedBy._id}`} className="font-semibold hover:underline">
+                {getDisplayName(post.repostedBy)}
+              </Link>{' '}
+              reposted
+            </>
+          )}
+        </p>
+      )}
+
       <header className="flex items-center gap-3 px-3 py-3">
-        <button
-          type="button"
-          disabled={post.mine}
-          onClick={() => setShowProfile(true)}
+        <Link
+          to={`/u/${post.author._id}`}
           aria-label={`Open ${name}'s profile`}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
           <Avatar name={name} src={post.author.avatar} size="md" />
           <span className="min-w-0">
             <span className="block truncate font-semibold">{name}</span>
             <span className="block text-xs text-slate-400">{timeAgo(post.createdAt)}</span>
           </span>
-        </button>
+        </Link>
 
         <div ref={menuRef} className="relative">
           <button
@@ -147,19 +207,12 @@ export default function PostCard({ post, onChange, onRemove, onMessage }) {
         </div>
       </header>
 
-      <div
-        className="relative overflow-hidden bg-slate-900"
-        style={{ aspectRatio: ratio }}
+      <ImageCarousel
+        images={post.images}
+        alt={post.caption ? post.caption.slice(0, 100) : `Photo by ${name}`}
+        ratio={ratio}
         onDoubleClick={handleDoubleClick}
       >
-        <img
-          src={fitWidth(post.imageUrl, 1080)}
-          alt={post.caption ? post.caption.slice(0, 100) : `Photo by ${name}`}
-          loading="lazy"
-          draggable={false}
-          className="h-full w-full object-cover"
-        />
-
         {burst && (
           <span
             aria-hidden="true"
@@ -168,7 +221,7 @@ export default function PostCard({ post, onChange, onRemove, onMessage }) {
             ❤️
           </span>
         )}
-      </div>
+      </ImageCarousel>
 
       <div className="px-3 py-3">
         <div className="flex items-center gap-4 text-2xl">
@@ -181,6 +234,7 @@ export default function PostCard({ post, onChange, onRemove, onMessage }) {
           >
             {post.liked ? '❤️' : '🤍'}
           </button>
+
           <button
             type="button"
             onClick={() => setShowComments((open) => !open)}
@@ -190,10 +244,36 @@ export default function PostCard({ post, onChange, onRemove, onMessage }) {
           >
             💬
           </button>
+
+          <button
+            type="button"
+            onClick={toggleRepost}
+            disabled={post.mine}
+            aria-pressed={post.reposted}
+            aria-label={post.reposted ? 'Undo repost' : 'Repost'}
+            title={post.mine ? 'You cannot repost your own post' : post.reposted ? 'Undo repost' : 'Repost'}
+            className={`rounded-full px-1 transition hover:scale-110 disabled:cursor-not-allowed disabled:opacity-30 ${
+              post.reposted ? 'bg-emerald-600/40' : ''
+            }`}
+          >
+            🔁
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDialog('share')}
+            aria-label="Share"
+            className="ml-auto transition hover:scale-110"
+          >
+            📤
+          </button>
         </div>
 
         <p className="mt-2 text-sm font-semibold">
-          {post.likeCount === 1 ? '1 like' : `${post.likeCount} likes`}
+          {plural(post.likeCount, 'like')}
+          {post.repostCount > 0 && (
+            <span className="font-normal text-slate-400"> · {plural(post.repostCount, 'repost')}</span>
+          )}
         </p>
 
         {post.caption && (
@@ -227,7 +307,7 @@ export default function PostCard({ post, onChange, onRemove, onMessage }) {
       {dialog === 'delete' && (
         <ConfirmDialog
           title="Delete this post?"
-          message="The photo, its likes and its comments will be removed for everyone."
+          message="The photos, their likes, comments and reposts will be removed for everyone."
           confirmLabel="Delete post"
           danger
           onConfirm={handleDelete}
@@ -254,13 +334,7 @@ export default function PostCard({ post, onChange, onRemove, onMessage }) {
         </Modal>
       )}
 
-      {showProfile && (
-        <UserProfileDialog
-          userId={post.author._id}
-          onClose={() => setShowProfile(false)}
-          onMessage={onMessage}
-        />
-      )}
+      {dialog === 'share' && <SharePostDialog post={post} onClose={() => setDialog(null)} />}
     </article>
   );
 }

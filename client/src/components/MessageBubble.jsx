@@ -3,6 +3,7 @@ import { getDisplayName } from '../utils/conversation';
 import { formatTime } from '../utils/formatTime';
 import AttachmentList from './AttachmentList';
 import MessageStatus from './MessageStatus';
+import SharedPostQuote from './SharedPostQuote';
 import StoryQuote from './StoryQuote';
 
 // One chat bubble. memo() means it redraws only when ITS OWN message changes,
@@ -20,6 +21,7 @@ function MessageBubble({ message, mine, showSender, status, glowing }) {
         )}
 
         {message.storyReply && <StoryQuote reply={message.storyReply} mine={mine} />}
+        {message.sharedPost && <SharedPostQuote shared={message.sharedPost} />}
 
         <AttachmentList attachments={message.attachments} />
 

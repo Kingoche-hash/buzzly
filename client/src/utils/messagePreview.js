@@ -4,6 +4,7 @@ import { isImage } from './attachments';
 export const getMessagePreview = (message) => {
   if (!message) return 'No messages yet';
   if (message.content) return message.content;
+  if (message.sharedPost) return '📸 Shared a post';
 
   const attachments = message.attachments || [];
 

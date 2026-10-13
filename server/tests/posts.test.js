@@ -6,22 +6,24 @@ import app from '../app.js';
 import Comment from '../models/Comment.js';
 import Like from '../models/Like.js';
 import Post from '../models/Post.js';
-import { authHeader, clearDatabase, closeTestDb, makeUser, openTestDb } from './helpers.js';
+import { authHeader, clearDatabase, closeTestDb, makeUser, openTestDb, startDirect } from './helpers.js';
 
 // Photos are never really uploaded in tests: posts are created directly in the database.
 const makePost = (author, caption = 'Hello') =>
   Post.create({
     author: author.id,
     caption,
-    image: {
-      url: 'https://res.cloudinary.com/test/image/upload/v1/sample.jpg',
-      publicId: '',
-      width: 800,
-      height: 1000,
-    },
+    images: [
+      {
+        url: 'https://res.cloudinary.com/test/image/upload/v1/sample.jpg',
+        publicId: '',
+        width: 800,
+        height: 1000,
+      },
+    ],
   });
 
-describe('posts, likes and comments', () => {
+describe('posts, reposts, shares, likes and comments', () => {
   let alice;
   let bob;
   let carol;
@@ -55,13 +57,13 @@ describe('posts, likes and comments', () => {
     const fake = await request(app)
       .post('/api/posts')
       .set(authHeader(alice))
-      .attach('image', Buffer.from('this is not an image'), { filename: 'fake.png', contentType: 'image/png' });
+      .attach('images', Buffer.from('this is not an image'), { filename: 'fake.png', contentType: 'image/png' });
     assert.equal(fake.status, 415);
 
     const wrongType = await request(app)
       .post('/api/posts')
       .set(authHeader(alice))
-      .attach('image', Buffer.from('hello'), { filename: 'notes.txt', contentType: 'text/plain' });
+      .attach('images', Buffer.from('hello'), { filename: 'notes.txt', contentType: 'text/plain' });
     assert.equal(wrongType.status, 415);
   });
 
@@ -69,8 +71,18 @@ describe('posts, likes and comments', () => {
     const res = await request(app)
       .post('/api/posts')
       .set(authHeader(alice))
-      .attach('image', Buffer.alloc(11 * 1024 * 1024), { filename: 'big.png', contentType: 'image/png' });
+      .attach('images', Buffer.alloc(11 * 1024 * 1024), { filename: 'big.png', contentType: 'image/png' });
     assert.equal(res.status, 413);
+  });
+
+  it('refuses more than 10 photos at once', async () => {
+    let req = request(app).post('/api/posts').set(authHeader(alice));
+
+    for (let index = 0; index < 11; index += 1) {
+      req = req.attach('images', Buffer.from('x'), { filename: `p${index}.png`, contentType: 'image/png' });
+    }
+
+    assert.equal((await req).status, 400);
   });
 
   it('lists the feed newest first, with my likes and my own posts marked', async () => {
@@ -86,11 +98,25 @@ describe('posts, likes and comments', () => {
     assert.deepEqual(res.body.posts.map((item) => item.mine), [false, true, false]);
     assert.deepEqual(res.body.posts.map((item) => item.liked), [false, false, true]);
     assert.equal(res.body.posts[0].author.username, 'alice');
+    assert.equal(res.body.posts[0].images.length, 1);
     assert.ok(res.body.posts[0].imageUrl.includes('sample.jpg'));
+    assert.equal(res.body.posts[0].repostedBy, null);
 
     const aliceView = await get(alice, '/api/posts');
     assert.equal(aliceView.body.posts[2].liked, false);
     assert.equal(aliceView.body.posts[2].likeCount, 1);
+  });
+
+  it('still shows older posts that kept a single picture', async () => {
+    await Post.create({
+      author: alice.id,
+      caption: 'old style',
+      image: { url: 'https://res.cloudinary.com/test/image/upload/v1/old.jpg', width: 600, height: 600 },
+    });
+
+    const res = await get(bob, '/api/posts');
+    assert.equal(res.body.posts[0].images.length, 1);
+    assert.ok(res.body.posts[0].imageUrl.includes('old.jpg'));
   });
 
   it('pages through the feed without loading everything', async () => {
@@ -109,12 +135,15 @@ describe('posts, likes and comments', () => {
     assert.equal(page3.body.hasMore, false);
   });
 
-  it("shows only one person's posts on their page", async () => {
+  it("shows only one person's posts on their page, with counts", async () => {
     await makePost(alice, 'mine');
     await makePost(bob, 'his');
 
     const res = await get(carol, `/api/posts/user/${alice.id}`);
     assert.deepEqual(captions(res), ['mine']);
+
+    const summary = await get(carol, `/api/posts/user/${alice.id}/summary`);
+    assert.deepEqual(summary.body, { posts: 1, reposts: 0 });
   });
 
   it('likes and unlikes without ever counting twice', async () => {
@@ -199,10 +228,84 @@ describe('posts, likes and comments', () => {
     assert.equal((await get(bob, `/api/posts/${item._id}`)).status, 404);
   });
 
-  it('hides a post after three different people report it', async () => {
+  it('reposts a post: it shows in the feed marked as a repost, and on the reposter profile', async () => {
+    const original = await makePost(alice, 'original');
+
+    const res = await post(bob, `/api/posts/${original._id}/repost`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.reposted, true);
+    assert.equal(res.body.repostCount, 1);
+
+    const feed = await get(carol, '/api/posts');
+    assert.equal(feed.body.posts.length, 2);
+
+    const [repost, plain] = feed.body.posts;
+    assert.equal(repost.repostedBy.username, 'bob');
+    assert.equal(repost.author.username, 'alice');
+    assert.equal(repost.caption, 'original');
+    assert.equal(repost._id, plain._id);
+    assert.notEqual(repost.itemId, plain.itemId);
+    assert.equal(plain.repostedBy, null);
+    assert.equal(plain.repostCount, 1);
+    assert.equal(plain.reposted, false);
+
+    const asBob = await get(bob, '/api/posts');
+    assert.ok(asBob.body.posts.every((item) => item.reposted === true));
+
+    const reposts = await get(carol, `/api/posts/user/${bob.id}?type=reposts`);
+    assert.deepEqual(captions(reposts), ['original']);
+
+    const bobPosts = await get(carol, `/api/posts/user/${bob.id}?type=posts`);
+    assert.equal(bobPosts.body.posts.length, 0);
+
+    const summary = await get(carol, `/api/posts/user/${bob.id}/summary`);
+    assert.deepEqual(summary.body, { posts: 0, reposts: 1 });
+  });
+
+  it('refuses reposting your own post, counts a repost once, and can undo it', async () => {
+    const own = await makePost(alice);
+    const url = `/api/posts/${own._id}/repost`;
+
+    assert.equal((await post(alice, url)).status, 400);
+
+    assert.equal((await post(bob, url)).body.repostCount, 1);
+    assert.equal((await post(bob, url)).body.repostCount, 1);
+
+    const undone = await del(bob, url);
+    assert.equal(undone.body.repostCount, 0);
+    assert.equal(undone.body.reposted, false);
+    assert.equal((await del(bob, url)).body.repostCount, 0);
+
+    assert.equal((await get(carol, '/api/posts')).body.posts.length, 1);
+  });
+
+  it('sends the likes and comments of a repost to the original post', async () => {
+    const original = await makePost(alice, 'original');
+    await post(bob, `/api/posts/${original._id}/repost`);
+
+    await post(carol, `/api/posts/${original._id}/like`);
+    await post(carol, `/api/posts/${original._id}/comments`, { text: 'nice' });
+
+    const feed = await get(alice, '/api/posts');
+    assert.ok(feed.body.posts.every((item) => item.likeCount === 1 && item.commentCount === 1));
+  });
+
+  it('removes the reposts when the original post is deleted', async () => {
+    const original = await makePost(alice);
+    await post(bob, `/api/posts/${original._id}/repost`);
+
+    await del(alice, `/api/posts/${original._id}`);
+
+    assert.equal((await get(carol, '/api/posts')).body.posts.length, 0);
+    assert.deepEqual((await get(carol, `/api/posts/user/${bob.id}/summary`)).body, { posts: 0, reposts: 0 });
+  });
+
+  it('hides a post after three different people report it, reposts included', async () => {
     const dave = await makeUser('dave');
     const item = await makePost(alice);
     const url = `/api/posts/${item._id}/report`;
+
+    await post(dave, `/api/posts/${item._id}/repost`);
 
     assert.equal((await post(alice, url, { reason: 'spam' })).status, 400); // not your own post
     assert.equal((await post(bob, url, { reason: 'nonsense' })).status, 400);
@@ -212,14 +315,74 @@ describe('posts, likes and comments', () => {
 
     // The reporter no longer sees it, everybody else still does.
     assert.equal((await get(bob, '/api/posts')).body.posts.length, 0);
-    assert.equal((await get(carol, '/api/posts')).body.posts.length, 1);
+    assert.equal((await get(carol, '/api/posts')).body.posts.length, 2);
 
     await post(carol, url, { reason: 'harassment' });
-    assert.equal((await get(dave, '/api/posts')).body.posts.length, 1); // two reports: still visible
+    assert.equal((await get(alice, '/api/posts')).body.posts.length, 2); // two reports: still visible
 
     await post(dave, url, { reason: 'other' });
-    assert.equal((await get(alice, '/api/posts')).body.posts.length, 0); // three reports: hidden
+    assert.equal((await get(alice, '/api/posts')).body.posts.length, 0); // three reports: hidden with its reposts
     assert.equal((await get(alice, `/api/posts/${item._id}`)).status, 404);
+  });
+
+  it('shares a post to a chat as a message with a post card', async () => {
+    const chat = await startDirect(alice, bob);
+    const original = await makePost(carol, 'look at this');
+
+    const res = await post(alice, `/api/posts/${original._id}/share`, {
+      conversationIds: [chat._id],
+      text: 'check this',
+    });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.sent, 1);
+
+    const history = await get(bob, `/api/conversations/${chat._id}/messages`);
+    const message = history.body.messages[0];
+
+    assert.equal(message.content, 'check this');
+    assert.equal(message.sharedPost.post, original._id.toString());
+    assert.equal(message.sharedPost.caption, 'look at this');
+    assert.equal(message.sharedPost.authorName, 'carol');
+    assert.equal(message.sharedPost.imageCount, 1);
+    assert.ok(message.sharedPost.imageUrl.includes('sample.jpg'));
+  });
+
+  it('shares without a message, and to several chats at once', async () => {
+    const chatWithBob = await startDirect(alice, bob);
+    const chatWithCarol = await startDirect(alice, carol);
+    const original = await makePost(bob);
+
+    const res = await post(alice, `/api/posts/${original._id}/share`, {
+      conversationIds: [chatWithBob._id, chatWithCarol._id],
+    });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.sent, 2);
+
+    const history = await get(carol, `/api/conversations/${chatWithCarol._id}/messages`);
+    assert.equal(history.body.messages.length, 1);
+    assert.equal(history.body.messages[0].content, '');
+    assert.ok(history.body.messages[0].sharedPost);
+  });
+
+  it('refuses chats that are not yours and sends nothing', async () => {
+    const chat = await startDirect(alice, bob);
+    const original = await makePost(alice);
+
+    const res = await post(carol, `/api/posts/${original._id}/share`, { conversationIds: [chat._id] });
+    assert.equal(res.status, 404);
+
+    const history = await get(alice, `/api/conversations/${chat._id}/messages`);
+    assert.equal(history.body.messages.length, 0);
+  });
+
+  it('refuses a share with no chats or too many chats', async () => {
+    const original = await makePost(alice);
+    const url = `/api/posts/${original._id}/share`;
+
+    assert.equal((await post(bob, url, { conversationIds: [] })).status, 400);
+
+    const many = Array.from({ length: 6 }, () => new mongoose.Types.ObjectId().toString());
+    assert.equal((await post(bob, url, { conversationIds: many })).status, 400);
   });
 
   it('removes everything an account owns when it is deleted', async () => {
@@ -228,6 +391,7 @@ describe('posts, likes and comments', () => {
 
     await post(bob, `/api/posts/${aliceThing._id}/like`);
     await post(bob, `/api/posts/${aliceThing._id}/comments`, { text: 'from bob' });
+    await post(bob, `/api/posts/${aliceThing._id}/repost`);
 
     const gone = await request(app)
       .delete('/api/profile')
@@ -239,6 +403,7 @@ describe('posts, likes and comments', () => {
     assert.deepEqual(captions(feed), ['alice post']);
     assert.equal(feed.body.posts[0].likeCount, 0);
     assert.equal(feed.body.posts[0].commentCount, 0);
+    assert.equal(feed.body.posts[0].repostCount, 0);
     assert.equal(await Post.countDocuments({ author: bob.id }), 0);
   });
 

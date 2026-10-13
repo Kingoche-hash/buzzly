@@ -6,17 +6,23 @@ import Post from '../models/Post.js';
 import Report from '../models/Report.js';
 import { AppError } from '../utils/AppError.js';
 import { hasValidSignature } from '../utils/fileSignature.js';
+import { getConversationForMember } from './conversation.service.js';
+import { createMessage } from './message.service.js';
 
 const FOLDER = 'chatapp/posts';
 const AUTHOR_FIELDS = 'username displayName avatar';
 const REPORTS_TO_HIDE = 3;
+const MAX_SHARE_TARGETS = 5;
 
 // Posts of deleted accounts come back with author = null, and we leave them out.
 const authorPopulate = { path: 'author', select: AUTHOR_FIELDS, match: { deletedAt: null } };
 
+// A repost shows its original, so we load the original together with ITS author.
+const repostPopulate = { path: 'repostOf', match: { hidden: false }, populate: authorPopulate };
+
 const sameId = (a, b) => a.toString() === b.toString();
 
-// Uploads the photo to Cloudinary, shrunk to at most 1440 x 1800.
+// Uploads one photo to Cloudinary, shrunk to at most 1440 x 1800.
 const uploadImageBuffer = (buffer) =>
   new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
@@ -42,6 +48,14 @@ const destroyImage = async (publicId) => {
   }
 };
 
+// The photos of a post. Older posts kept one picture in `image`.
+const imagesOf = (post) => {
+  if (post.images?.length) return post.images;
+  return post.image?.url ? [post.image] : [];
+};
+
+const publicIdsOf = (post) => imagesOf(post).map((image) => image.publicId).filter(Boolean);
+
 const toAuthorDto = (author) => ({
   _id: author._id,
   username: author.username,
@@ -49,20 +63,40 @@ const toAuthorDto = (author) => ({
   avatar: author.avatar,
 });
 
-// What the browser gets for one post. `likedIds` is the set of post ids the viewer has liked.
-const toPostDto = (post, viewerId, likedIds = new Set()) => ({
-  _id: post._id,
-  author: toAuthorDto(post.author),
-  imageUrl: post.image.url,
-  width: post.image.width,
-  height: post.image.height,
-  caption: post.caption,
-  likeCount: post.likeCount,
-  commentCount: post.commentCount,
-  liked: likedIds.has(post._id.toString()),
-  mine: sameId(post.author._id, viewerId),
-  createdAt: post.createdAt,
-});
+// What the browser gets for one entry of a feed or profile.
+// For a repost it shows the ORIGINAL post, plus who reposted it. `_id` is always the original's id
+// (that is what likes and comments use) and `itemId` is the id of this entry.
+const toItemDto = (item, viewerId, liked, reposted) => {
+  const isRepost = item.isRepost === true;
+  const original = isRepost ? item.repostOf : item;
+
+  const images = imagesOf(original).map((image) => ({
+    url: image.url,
+    width: image.width,
+    height: image.height,
+  }));
+  const first = images[0] || { url: '', width: 1, height: 1 };
+
+  return {
+    _id: original._id,
+    itemId: item._id,
+    repostedBy: isRepost ? toAuthorDto(item.author) : null,
+    author: toAuthorDto(original.author),
+    images,
+    imageUrl: first.url,
+    width: first.width,
+    height: first.height,
+    caption: original.caption,
+    likeCount: original.likeCount,
+    commentCount: original.commentCount,
+    repostCount: original.repostCount || 0,
+    liked: liked.has(original._id.toString()),
+    reposted: reposted.has(original._id.toString()),
+    mine: sameId(original.author._id, viewerId),
+    createdAt: original.createdAt,
+    sharedAt: item.createdAt,
+  };
+};
 
 const toCommentDto = (comment, viewerId, postAuthorId) => ({
   _id: comment._id,
@@ -79,9 +113,20 @@ const likedSetFor = async (viewerId, postIds) => {
   return new Set(likes.map((like) => like.post.toString()));
 };
 
-// A post that exists, is not hidden, and still has an author.
+const repostedSetFor = async (viewerId, postIds) => {
+  if (postIds.length === 0) return new Set();
+
+  const reposts = await Post.find({ author: viewerId, isRepost: true, repostOf: { $in: postIds } })
+    .select('repostOf')
+    .lean();
+  return new Set(reposts.map((repost) => repost.repostOf.toString()));
+};
+
+// An original post that exists, is not hidden, and still has an author.
 const loadVisiblePost = async (postId) => {
-  const post = await Post.findOne({ _id: postId, hidden: false }).populate(authorPopulate);
+  const post = await Post.findOne({ _id: postId, hidden: false, isRepost: { $ne: true } }).populate(
+    authorPopulate
+  );
 
   if (!post || !post.author) {
     throw new AppError('Post not found', 404);
@@ -90,77 +135,114 @@ const loadVisiblePost = async (postId) => {
   return post;
 };
 
-export const createPost = async ({ userId, file, caption }) => {
-  if (!hasValidSignature(file)) {
-    throw new AppError('That file is not a real image', 415);
+export const createPost = async ({ userId, files, caption }) => {
+  if (!files || files.length === 0) {
+    throw new AppError('Choose at least one photo', 400);
   }
 
-  let uploaded;
+  // Check every file before uploading any of them.
+  for (const file of files) {
+    if (!hasValidSignature(file)) {
+      throw new AppError('One of those files is not a real image', 415);
+    }
+  }
 
-  try {
-    uploaded = await uploadImageBuffer(file.buffer);
-  } catch (error) {
-    console.error('Cloudinary post upload error:', error.message);
+  const settled = await Promise.allSettled(files.map((file) => uploadImageBuffer(file.buffer)));
+  const results = settled.filter((item) => item.status === 'fulfilled').map((item) => item.value);
+
+  // If one photo failed, remove the ones that did upload, so nothing is left behind.
+  if (results.length !== files.length) {
+    await Promise.allSettled(results.map((result) => destroyImage(result.public_id)));
+
+    const failure = settled.find((item) => item.status === 'rejected');
+    console.error('Cloudinary post upload error:', failure?.reason?.message);
     throw new AppError('Upload failed. Please try again.', 502);
   }
 
   const post = await Post.create({
     author: userId,
     caption,
-    image: {
-      url: uploaded.secure_url,
-      publicId: uploaded.public_id,
-      width: uploaded.width,
-      height: uploaded.height,
-    },
+    images: results.map((result) => ({
+      url: result.secure_url,
+      publicId: result.public_id,
+      width: result.width,
+      height: result.height,
+    })),
   });
 
   await post.populate(authorPopulate);
 
-  return toPostDto(post, userId);
+  return toItemDto(post, userId, new Set(), new Set());
 };
 
-// The feed (everyone's posts) or, with authorId, one person's posts. Newest first, in pages.
-export const listPosts = async ({ viewerId, authorId, before, limit }) => {
+// The feed (everyone's posts and reposts) or, with authorId, one person's. Newest first, in pages.
+// type: 'posts' (no reposts) or 'reposts' (only reposts), for the tabs of a profile.
+export const listPosts = async ({ viewerId, authorId, type, before, limit }) => {
   // Posts I reported never show up for me again.
-  const reported = await Report.distinct('post', { reporter: viewerId });
+  const reported = new Set((await Report.distinct('post', { reporter: viewerId })).map(String));
 
   const filter = { hidden: false };
   if (authorId) filter.author = authorId;
+  if (type === 'posts') filter.isRepost = { $ne: true };
+  if (type === 'reposts') filter.isRepost = true;
+  if (before) filter._id = { $lt: before };
 
-  const range = {};
-  if (reported.length > 0) range.$nin = reported;
-  if (before) range.$lt = before;
-  if (Object.keys(range).length > 0) filter._id = range;
-
-  // Ask for one extra post, just to learn whether older ones exist.
+  // Ask for one extra entry, just to learn whether older ones exist.
   const found = await Post.find(filter)
     .sort({ _id: -1 })
     .limit(limit + 1)
-    .populate(authorPopulate);
+    .populate([authorPopulate, repostPopulate]);
 
   const hasMore = found.length > limit;
   const page = hasMore ? found.slice(0, limit) : found;
   const nextCursor = hasMore ? page.at(-1)._id : null;
 
-  const visible = page.filter((post) => post.author);
-  const liked = await likedSetFor(
-    viewerId,
-    visible.map((post) => post._id)
-  );
+  // Leave out entries whose person is gone, or whose original was hidden, deleted or reported by me.
+  const usable = page.filter((item) => {
+    if (!item.author) return false;
 
-  return { posts: visible.map((post) => toPostDto(post, viewerId, liked)), hasMore, nextCursor };
+    if (item.isRepost) {
+      return Boolean(item.repostOf?.author) && !reported.has(item.repostOf._id.toString());
+    }
+
+    return !reported.has(item._id.toString());
+  });
+
+  const originalIds = usable.map((item) => (item.isRepost ? item.repostOf._id : item._id));
+  const [liked, reposted] = await Promise.all([
+    likedSetFor(viewerId, originalIds),
+    repostedSetFor(viewerId, originalIds),
+  ]);
+
+  return {
+    posts: usable.map((item) => toItemDto(item, viewerId, liked, reposted)),
+    hasMore,
+    nextCursor,
+  };
 };
 
 export const getPost = async ({ viewerId, postId }) => {
   const post = await loadVisiblePost(postId);
-  const liked = await likedSetFor(viewerId, [post._id]);
+  const [liked, reposted] = await Promise.all([
+    likedSetFor(viewerId, [post._id]),
+    repostedSetFor(viewerId, [post._id]),
+  ]);
 
-  return toPostDto(post, viewerId, liked);
+  return toItemDto(post, viewerId, liked, reposted);
+};
+
+// How many posts and reposts someone has (the numbers on their profile).
+export const getUserSummary = async (userId) => {
+  const [posts, reposts] = await Promise.all([
+    Post.countDocuments({ author: userId, hidden: false, isRepost: { $ne: true } }),
+    Post.countDocuments({ author: userId, isRepost: true }),
+  ]);
+
+  return { posts, reposts };
 };
 
 export const deletePost = async (userId, postId) => {
-  const post = await Post.findOneAndDelete({ _id: postId, author: userId });
+  const post = await Post.findOneAndDelete({ _id: postId, author: userId, isRepost: { $ne: true } });
 
   if (!post) {
     throw new AppError('Post not found', 404);
@@ -170,9 +252,10 @@ export const deletePost = async (userId, postId) => {
     Comment.deleteMany({ post: post._id }),
     Like.deleteMany({ post: post._id }),
     Report.deleteMany({ post: post._id }),
+    Post.deleteMany({ repostOf: post._id }), // reposts of a deleted post go with it
   ]);
 
-  await destroyImage(post.image?.publicId);
+  await Promise.allSettled(publicIdsOf(post).map(destroyImage));
 };
 
 export const likePost = async (userId, postId) => {
@@ -201,6 +284,78 @@ export const unlikePost = async (userId, postId) => {
 
   const post = await Post.findById(postId).select('likeCount').lean();
   return { liked: false, likeCount: post.likeCount };
+};
+
+// Puts someone else's post on my profile and into the feed.
+export const repostPost = async (userId, postId) => {
+  const original = await loadVisiblePost(postId);
+
+  if (sameId(original.author._id, userId)) {
+    throw new AppError('You cannot repost your own post', 400);
+  }
+
+  try {
+    await Post.create({ author: userId, repostOf: original._id, isRepost: true });
+    await Post.updateOne({ _id: postId }, { $inc: { repostCount: 1 } });
+  } catch (error) {
+    // Already reposted (duplicate key): reposting twice never counts twice.
+    if (error.code !== 11000) throw error;
+  }
+
+  const fresh = await Post.findById(postId).select('repostCount').lean();
+  return { reposted: true, repostCount: fresh.repostCount };
+};
+
+export const unrepostPost = async (userId, postId) => {
+  const removed = await Post.findOneAndDelete({ author: userId, repostOf: postId, isRepost: true });
+
+  if (removed) {
+    await Post.updateOne({ _id: postId, repostCount: { $gt: 0 } }, { $inc: { repostCount: -1 } });
+  }
+
+  const fresh = await Post.findById(postId).select('repostCount').lean();
+
+  if (!fresh) {
+    throw new AppError('Post not found', 404);
+  }
+
+  return { reposted: false, repostCount: fresh.repostCount };
+};
+
+// Sends a post to some of my chats, as messages with a small post card.
+export const sharePost = async ({ userId, postId, conversationIds, text }) => {
+  const post = await loadVisiblePost(postId);
+
+  const targets = [...new Set(conversationIds)];
+
+  if (targets.length > MAX_SHARE_TARGETS) {
+    throw new AppError(`You can share to at most ${MAX_SHARE_TARGETS} chats at once`, 400);
+  }
+
+  // Check every chat first, so nothing is sent if one of them is not mine.
+  for (const conversationId of targets) {
+    await getConversationForMember(conversationId, userId);
+  }
+
+  const images = imagesOf(post);
+
+  const snapshot = {
+    post: post._id,
+    imageUrl: images[0]?.url || '',
+    imageCount: images.length,
+    caption: (post.caption || '').slice(0, 140),
+    authorName: (post.author.displayName || post.author.username).slice(0, 60),
+  };
+
+  const messages = [];
+
+  for (const conversationId of targets) {
+    messages.push(
+      await createMessage({ conversationId, senderId: userId, content: text || '', sharedPost: snapshot })
+    );
+  }
+
+  return messages;
 };
 
 export const listComments = async ({ viewerId, postId, before, limit }) => {
@@ -273,20 +428,23 @@ export const reportPost = async ({ userId, postId, reason }) => {
   }
 };
 
-// When an account is deleted: their posts, comments and likes go too.
+// When an account is deleted: their posts, reposts, comments and likes go too.
 export const removeUserContent = async (userId) => {
-  const posts = await Post.find({ author: userId }).select('image.publicId').lean();
-  const postIds = posts.map((post) => post._id);
+  const mine = await Post.find({ author: userId }).select('images image isRepost repostOf').lean();
+  const originals = mine.filter((post) => !post.isRepost);
+  const myReposts = mine.filter((post) => post.isRepost);
+  const originalIds = originals.map((post) => post._id);
 
   await Promise.all([
-    Comment.deleteMany({ post: { $in: postIds } }),
-    Like.deleteMany({ post: { $in: postIds } }),
-    Report.deleteMany({ post: { $in: postIds } }),
+    Comment.deleteMany({ post: { $in: originalIds } }),
+    Like.deleteMany({ post: { $in: originalIds } }),
+    Report.deleteMany({ post: { $in: originalIds } }),
+    Post.deleteMany({ repostOf: { $in: originalIds } }), // other people's reposts of my posts
   ]);
   await Post.deleteMany({ author: userId });
-  await Promise.allSettled(posts.map((post) => destroyImage(post.image?.publicId)));
+  await Promise.allSettled(originals.flatMap((post) => publicIdsOf(post)).map(destroyImage));
 
-  // Their likes and comments on other people's posts: take them back off the counters.
+  // Their likes, comments and reposts on other people's posts: take them back off the counters.
   const [likes, comments] = await Promise.all([
     Like.find({ user: userId }).select('post').lean(),
     Comment.find({ author: userId }).select('post').lean(),
@@ -300,6 +458,12 @@ export const removeUserContent = async (userId) => {
       updateOne: {
         filter: { _id: comment.post, commentCount: { $gt: 0 } },
         update: { $inc: { commentCount: -1 } },
+      },
+    })),
+    ...myReposts.map((repost) => ({
+      updateOne: {
+        filter: { _id: repost.repostOf, repostCount: { $gt: 0 } },
+        update: { $inc: { repostCount: -1 } },
       },
     })),
   ];

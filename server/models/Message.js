@@ -25,6 +25,18 @@ const storyReplySchema = new Schema(
   { _id: false }
 );
 
+// What a shared post remembers, because the post can be deleted later.
+const sharedPostSchema = new Schema(
+  {
+    post: { type: Schema.Types.ObjectId, ref: 'Post' },
+    imageUrl: { type: String, default: '' },
+    imageCount: { type: Number, default: 1 },
+    caption: { type: String, maxlength: 140, default: '' },
+    authorName: { type: String, maxlength: 60, default: '' },
+  },
+  { _id: false }
+);
+
 const messageSchema = new Schema(
   {
     conversation: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true },
@@ -32,6 +44,7 @@ const messageSchema = new Schema(
     content: { type: String, trim: true, maxlength: 4000, default: '' },
     attachments: { type: [attachmentSchema], default: [] },
     storyReply: { type: storyReplySchema, default: undefined },
+    sharedPost: { type: sharedPostSchema, default: undefined },
     deliveredTo: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     readBy: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   },

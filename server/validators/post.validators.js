@@ -10,9 +10,11 @@ export const createPostSchema = z.object({
   caption: z.string().trim().max(2000, 'A caption can have at most 2000 characters').optional(),
 });
 
+// type: only real posts, or only reposts (for the two tabs of a profile).
 export const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(10),
   before: objectId.optional(),
+  type: z.enum(['posts', 'reposts']).optional(),
 });
 
 export const commentsQuerySchema = z.object({
@@ -26,4 +28,12 @@ export const addCommentSchema = z.object({
 
 export const reportSchema = z.object({
   reason: z.enum(['spam', 'inappropriate', 'harassment', 'other']),
+});
+
+export const sharePostSchema = z.object({
+  conversationIds: z
+    .array(objectId)
+    .min(1, 'Choose at least one chat')
+    .max(5, 'You can share to at most 5 chats at once'),
+  text: z.string().trim().max(500, 'A message can have at most 500 characters').optional(),
 });

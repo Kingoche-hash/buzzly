@@ -13,8 +13,9 @@ export const createMessage = async ({
   content = '',
   attachments = [],
   storyReply,
+  sharedPost,
 }) => {
-  if (!content && attachments.length === 0) {
+  if (!content && attachments.length === 0 && !sharedPost) {
     throw new AppError('Message cannot be empty', 400);
   }
 
@@ -26,6 +27,7 @@ export const createMessage = async ({
     content,
     attachments,
     storyReply,
+    sharedPost,
   });
 
   await Conversation.updateOne(

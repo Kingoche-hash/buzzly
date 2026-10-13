@@ -15,8 +15,9 @@ function PostSkeleton() {
   );
 }
 
-// The feed: everyone's posts, newest first. Shown beside the chat list on a computer, full screen on a phone.
-export default function FeedPanel({ onBack, onStartChat }) {
+// The feed: everyone's posts and reposts, newest first.
+// Shown beside the chat list on a computer, full screen on a phone.
+export default function FeedPanel({ onBack }) {
   const {
     posts,
     loading,
@@ -29,6 +30,7 @@ export default function FeedPanel({ onBack, onStartChat }) {
     newCount,
     updatePost,
     removePost,
+    removeItem,
     addPost,
   } = usePosts({ live: true });
 
@@ -122,11 +124,11 @@ export default function FeedPanel({ onBack, onStartChat }) {
 
           {posts.map((post) => (
             <PostCard
-              key={post._id}
+              key={post.itemId}
               post={post}
               onChange={updatePost}
               onRemove={removePost}
-              onMessage={onStartChat}
+              onRemoveItem={removeItem}
             />
           ))}
 

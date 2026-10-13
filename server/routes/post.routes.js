@@ -8,13 +8,17 @@ import {
   getFeedHandler,
   getPostHandler,
   getUserPostsHandler,
+  getUserSummaryHandler,
   likeHandler,
   reportHandler,
+  repostHandler,
+  shareHandler,
   unlikeHandler,
+  unrepostHandler,
 } from '../controllers/post.controller.js';
 import { protect } from '../middleware/auth.js';
 import { commentLimiter, postLimiter, uploadLimiter } from '../middleware/rateLimiter.js';
-import { uploadPostImage } from '../middleware/uploadPostImage.js';
+import { uploadPostImages } from '../middleware/uploadPostImages.js';
 import { validate } from '../middleware/validate.js';
 import {
   addCommentSchema,
@@ -24,6 +28,7 @@ import {
   listQuerySchema,
   postIdParams,
   reportSchema,
+  sharePostSchema,
   userPostsParams,
 } from '../validators/post.validators.js';
 
@@ -32,9 +37,10 @@ const router = Router();
 router.use(protect);
 
 router.get('/', validate(listQuerySchema, 'query'), getFeedHandler);
-router.post('/', postLimiter, uploadLimiter, uploadPostImage, validate(createPostSchema), createMyPost);
+router.post('/', postLimiter, uploadLimiter, uploadPostImages, validate(createPostSchema), createMyPost);
 
-// One person's posts (for their profile). It must come before "/:postId".
+// One person's posts and counts (for their profile). These must come before "/:postId".
+router.get('/user/:userId/summary', validate(userPostsParams, 'params'), getUserSummaryHandler);
 router.get(
   '/user/:userId',
   validate(userPostsParams, 'params'),
@@ -47,6 +53,17 @@ router.delete('/:postId', validate(postIdParams, 'params'), deleteMyPost);
 
 router.post('/:postId/like', validate(postIdParams, 'params'), likeHandler);
 router.delete('/:postId/like', validate(postIdParams, 'params'), unlikeHandler);
+
+router.post('/:postId/repost', commentLimiter, validate(postIdParams, 'params'), repostHandler);
+router.delete('/:postId/repost', validate(postIdParams, 'params'), unrepostHandler);
+
+router.post(
+  '/:postId/share',
+  commentLimiter,
+  validate(postIdParams, 'params'),
+  validate(sharePostSchema),
+  shareHandler
+);
 
 router.get(
   '/:postId/comments',

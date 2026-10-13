@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { usePresence } from '../hooks/usePresence';
 import { useSocket } from '../hooks/useSocket';
@@ -18,7 +18,6 @@ import StoriesRow from './StoriesRow';
 
 // These parts download only when the person first opens them.
 const NewChatDialog = lazy(() => import('./NewChatDialog'));
-const ProfileDialog = lazy(() => import('./ProfileDialog'));
 const SearchPanel = lazy(() => import('./SearchPanel'));
 const ThemePicker = lazy(() => import('./ThemePicker'));
 
@@ -54,11 +53,11 @@ export default function Sidebar({
   const { isOnline } = usePresence();
   const { getTypingNames } = useTyping();
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   const [tab, setTab] = useState('chats');
   const [filter, setFilter] = useState('all');
   const [showNewChat, setShowNewChat] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
 
   // Desktop notifications need the person's permission first.
@@ -94,7 +93,7 @@ export default function Sidebar({
       <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
         <button
           type="button"
-          onClick={() => setShowProfile(true)}
+          onClick={() => navigate(`/u/${user._id}`)}
           aria-label="Open your profile"
           className="flex min-w-0 items-center gap-3 rounded-lg text-left"
         >
@@ -304,7 +303,6 @@ export default function Sidebar({
           />
         )}
 
-        {showProfile && <ProfileDialog onClose={() => setShowProfile(false)} />}
         {showTheme && <ThemePicker onClose={() => setShowTheme(false)} />}
       </Suspense>
     </aside>

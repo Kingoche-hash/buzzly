@@ -14,13 +14,21 @@ const FeedPanel = lazy(() => import('../components/FeedPanel'));
 
 export default function ChatPage() {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, state: routeState } = useLocation();
   const onFeed = pathname === '/feed';
 
   const [activeId, setActiveId] = useState(null);
 
   // Set when the person clicks a search result: which message to open the chat around.
   const [jump, setJump] = useState(null);
+
+  // Coming from someone's profile page with "Message": open that chat.
+  useEffect(() => {
+    if (!routeState?.openConversationId) return;
+
+    setActiveId(routeState.openConversationId);
+    navigate(pathname, { replace: true, state: null });
+  }, [routeState, navigate, pathname]);
 
   const { conversations, loading, error, addConversation, reload, updateState } =
     useConversations(activeId);
