@@ -12,13 +12,10 @@ const userSchema = new mongoose.Schema(
       maxlength: 30,
     },
     displayName: { type: String, trim: true, maxlength: 40, default: '' },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
+    // People sign up with an email address OR a phone number, so each one is optional.
+    // (The check below makes sure there is at least one.)
+    email: { type: String, lowercase: true, trim: true, unique: true, sparse: true },
+    phone: { type: String, trim: true, unique: true, sparse: true },
     password: {
       type: String,
       required: true,
@@ -39,9 +36,19 @@ const userSchema = new mongoose.Schema(
     isOnline: { type: Boolean, default: false },
     lastSeen: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
+    // false until the person confirms their email or phone with a code.
+    // Accounts made before this feature existed count as confirmed, so the default is true.
+    verified: { type: Boolean, default: true },
+    verifiedAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );
+
+userSchema.pre('validate', function () {
+  if (!this.deletedAt && !this.email && !this.phone) {
+    this.invalidate('email', 'An email address or a phone number is required');
+  }
+});
 
 userSchema.pre('save', async function () {
   if (!this.isModified('password')) return;

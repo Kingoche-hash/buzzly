@@ -6,7 +6,7 @@ const production = env.nodeEnv === 'production';
 // A ceiling for the whole API, per visitor address.
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: production ? 600 : 5000,
+  limit: production ? 600 : 50000,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { message: 'Too many requests, please slow down' },
@@ -14,7 +14,7 @@ export const apiLimiter = rateLimit({
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: production ? 20 : 100,
+  limit: production ? 20 : 2000,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { message: 'Too many attempts, please try again later' },

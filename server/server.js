@@ -6,6 +6,7 @@ import { connectDB } from './config/db.js';
 import { connectRedis, redis } from './config/redis.js';
 import { resetPresence } from './services/presence.service.js';
 import { cleanupExpiredStories } from './services/story.service.js';
+import User from './models/User.js';
 import { initSocket } from './socket/index.js';
 
 const server = http.createServer(app);
@@ -19,6 +20,15 @@ const start = async () => {
   try {
     await connectDB();
     await connectRedis();
+
+    // An account can now have a phone number and no email, so the indexes on users must allow that.
+    await User.syncIndexes().catch((error) => console.error('Could not update the user indexes:', error.message));
+
+    // Sign-ups that were never confirmed are removed after a day.
+    await User.deleteMany({
+      verified: false,
+      createdAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    }).catch((error) => console.error('Could not clean up old sign-ups:', error.message));
     // Clearing old presence is housekeeping: if Redis is slow or over its free limit, the server should still start.
     await resetPresence().catch((error) => console.error('Could not reset presence:', error.message));
 

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AuthContext } from './authContext';
-import { getMeRequest, loginRequest, registerRequest } from '../services/auth.service';
+import {
+  getMeRequest,
+  loginRequest,
+  registerRequest,
+  verifyRequest,
+} from '../services/auth.service';
 import { clearToken, getToken, setToken } from '../services/tokenStorage';
 
 export default function AuthProvider({ children }) {
@@ -34,14 +39,20 @@ export default function AuthProvider({ children }) {
     return () => window.removeEventListener('auth:logout', handleLogout);
   }, []);
 
+  // credentials: { identifier (an email or a phone number), password }.
+  // If the account was never confirmed, the server answers 403 and the login page sends the person to the code screen.
   const login = useCallback(async (credentials) => {
     const { user, token } = await loginRequest(credentials);
     setToken(token);
     setUser(user);
   }, []);
 
-  const register = useCallback(async (details) => {
-    const { user, token } = await registerRequest(details);
+  // A new account is NOT logged in yet: this only starts the sign-up and returns where the code was sent.
+  const register = useCallback((details) => registerRequest(details), []);
+
+  // Confirms the code, and logs the person in.
+  const verify = useCallback(async ({ identifier, code }) => {
+    const { user, token } = await verifyRequest({ identifier, code });
     setToken(token);
     setUser(user);
   }, []);
@@ -57,8 +68,8 @@ export default function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, updateUser }),
-    [user, loading, login, register, logout, updateUser]
+    () => ({ user, loading, login, register, verify, logout, updateUser }),
+    [user, loading, login, register, verify, logout, updateUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

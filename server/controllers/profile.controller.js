@@ -13,6 +13,7 @@ import { AppError } from '../utils/AppError.js';
 import { removeUserBlocks } from '../services/block.service.js';
 import { removeUserFriendships } from '../services/friend.service.js';
 import { removeUserContent } from '../services/post.service.js';
+import User from '../models/User.js';
 import { signToken } from '../utils/token.js';
 
 export const updateMyProfile = async (req, res) => {
@@ -64,6 +65,9 @@ export const changeMyPassword = async (req, res) => {
 
 export const deleteMyAccount = async (req, res) => {
   await deleteAccount(req.user._id, req.body.password);
+
+  // A deleted account gives its phone number back, so it can be used to sign up again.
+  await User.updateOne({ _id: req.user._id }, { $unset: { phone: 1 } });
 
   // Their posts, comments and likes go too. A failure here must not undo the deletion.
   await removeUserContent(req.user._id).catch((error) =>

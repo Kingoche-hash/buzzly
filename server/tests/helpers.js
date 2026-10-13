@@ -3,8 +3,29 @@ import mongoose from 'mongoose';
 import request from 'supertest';
 import app from '../app.js';
 import { redis } from '../config/redis.js';
+import User from '../models/User.js';
+import { testOutbox } from '../services/mail.service.js';
+import { testSmsOutbox } from '../services/sms.service.js';
+import { signToken } from '../utils/token.js';
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The emails and texts that tests "sent" are kept in memory instead.
+export const clearOutboxes = () => {
+  testOutbox.length = 0;
+  testSmsOutbox.length = 0;
+};
+
+// Every email or text "sent" to this address or number, oldest first.
+export const messagesTo = (target) => [...testOutbox, ...testSmsOutbox].filter((message) => message.to === target);
+
+// The 6-digit code in the newest message sent to this address or number.
+export const lastCode = (target) => {
+  const last = messagesTo(target).at(-1);
+  if (!last) return null;
+
+  return (last.text || last.body || '').match(/\b(\d{6})\b/)?.[1] ?? null;
+};
 
 // Wipes this process's TEST database and the fake Redis.
 export const clearDatabase = async () => {
@@ -12,6 +33,7 @@ export const clearDatabase = async () => {
     Object.values(mongoose.connection.collections).map((collection) => collection.deleteMany({}))
   );
   await redis.flushall();
+  clearOutboxes();
 };
 
 export const openTestDb = async () => {
@@ -40,18 +62,23 @@ export const closeTestDb = async () => {
 
 export const authHeader = (user) => ({ Authorization: `Bearer ${user.token}` });
 
-// Registers a user through the real API and returns what the tests need.
+// A person who has already confirmed their account. Made directly in the database, because
+// going through the whole sign-up (code, email...) in every test would be far too slow.
+// The sign-up flow itself is tested in auth.test.js.
 export const makeUser = async (username, extra = {}) => {
   const email = `${username}@test.com`;
   const password = 'Test12345';
 
-  const res = await request(app)
-    .post('/api/auth/register')
-    .send({ username, email, password, ...extra });
+  const user = await User.create({
+    username,
+    email,
+    password,
+    verified: true,
+    verifiedAt: new Date(),
+    ...extra,
+  });
 
-  assert.equal(res.status, 201, `could not register ${username}: ${JSON.stringify(res.body)}`);
-
-  return { id: res.body.user._id, username, email, password, token: res.body.token };
+  return { id: user._id.toString(), username, email, password, token: signToken(user._id.toString()) };
 };
 
 export const startDirect = async (a, b) => {

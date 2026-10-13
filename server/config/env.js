@@ -30,9 +30,11 @@ const parseList = (value) =>
     .filter(Boolean);
 
 const clientUrls = parseList(process.env.CLIENT_URL || 'http://localhost:5173');
+const nodeEnv = process.env.NODE_ENV || 'development';
+const isTest = nodeEnv === 'test';
 
 export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   port: Number(process.env.PORT) || 5001,
   mongoUri: process.env.MONGODB_URI,
   redisUrl: process.env.REDIS_URL,
@@ -49,4 +51,24 @@ export const env = {
     apiKey: process.env.CLOUDINARY_API_KEY,
     apiSecret: process.env.CLOUDINARY_API_SECRET,
   },
+  // Emails: "brevo" sends them for real, "console" prints them in the server terminal,
+  // and "memory" (tests only) keeps them so a test can read the code.
+  mail: {
+    provider:
+      process.env.MAIL_PROVIDER || (isTest ? 'memory' : process.env.BREVO_API_KEY ? 'brevo' : 'console'),
+    brevoApiKey: process.env.BREVO_API_KEY || '',
+    fromEmail: process.env.MAIL_FROM_EMAIL || '',
+    fromName: process.env.MAIL_FROM_NAME || 'Buzzly',
+  },
+  // Text messages: "twilio" sends them for real (paid), "console" prints them, "memory" is for tests.
+  sms: {
+    provider:
+      process.env.SMS_PROVIDER || (isTest ? 'memory' : process.env.TWILIO_ACCOUNT_SID ? 'twilio' : 'console'),
+    twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
+    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
+    // A Twilio phone number, or a Messaging Service id that starts with MG.
+    twilioFrom: process.env.TWILIO_FROM || '',
+  },
+  // Signing up with a phone number. On by default while developing, OFF in production until PHONE_SIGNUP=on.
+  phoneSignup: process.env.PHONE_SIGNUP ? process.env.PHONE_SIGNUP === 'on' : nodeEnv !== 'production',
 };
